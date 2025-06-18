@@ -46,33 +46,132 @@ BLOCKADE_END = datetime(1944, 1, 27)
 # Ограничение частоты кадров
 MAX_FPS = 30
 
+# Ограничение параметров
+MAX_FOOD = 250
+MAX_HEALTH = 100
+MAX_MORALE = 100
+
+# 
+@dataclasses.dataclass
+class PlayerStats:
+    """Этот класс описывает параметры игрока."""
+    food: int
+    """Текущее количество еды."""
+    health: int
+    """Текущее количество здоровья."""
+    morale: int
+    """Текущее количество боевого духа."""
+
+@dataclasses.dataclass
+class PlayerStatsModifier:
+    """Этот класс описывает изменение параметров игрока из-за внешних факторов."""
+    food: int
+    """Изменение в количестве еды."""
+    health: int
+    """Изменение в количестве здоровья."""
+    morale: int
+    """Изменение в количестве боевого духа."""
+
+    def apply(self, stats: PlayerStats):
+        stats.food = max(min(self.food + stats.food, MAX_FOOD), 0)
+        stats.health = max(min(self.health + stats.health, MAX_HEALTH), 0)
+        stats.morale = max(min(self.morale + stats.morale, MAX_MORALE), 0)
+
+@dataclasses.dataclass
+class SimpleConsequence:
+    """Этот класс описывает последствия обычного выбора."""
+    text: str
+    """Текст, описывающий последствия выбора."""
+    modifier: PlayerStatsModifier
+    """Изменение параметров происходящее происходящее в результате выбора."""
+
+    def apply_consequences(self, stats: PlayerStats) -> str:
+        """Применяет последствия выбора к параметрам игрока. 
+        
+        Возвращает текст, описывающий последствия выбора."""
+        self.modifier.apply(stats)
+        return self.text
+
+@dataclasses.dataclass
+class RiskBasedConsequence:
+    """Этот класс описывает последствия выбора, связанного с риском."""
+    risk: float
+    """Шанс успеха в промежутке от 1 до 0."""
+    success: SimpleConsequence
+    """Последствия при успехе."""
+    failure: SimpleConsequence
+    """Последствия при провале."""
+
+    def apply_consequences(self, stats: PlayerStats) -> str:
+        """Применяет последствия выбора к параметрам игрока. 
+        
+        Возвращает текст, описывающий последствия выбора."""
+        if random.random() > self.risk:
+            return self.success.apply_consequences(stats)
+        else:
+            return self.failure.apply_consequences(stats)
+
+@dataclasses.dataclass
+class Choice:
+    """Этот класс описывает выбор."""
+    text: str
+    """Текст выбора."""
+    consequence: SimpleConsequence | RiskBasedConsequence
+    """Последствие выбора."""
+
+@dataclasses.dataclass
+class Scene:
+    """Этот класс описывает сцену (этап игры с выборами)."""
+    text: str
+    """Текскт описывающий сцену."""
+    background: pygame.Surface
+    """Фоновое изображение сцены."""
+    sound: pygame.mixer.Sound
+    """Звук играющий при начале сцены."""
+    choices: list[Choice]
+    """Список выборов доступных в сцене."""
+
 @dataclasses.dataclass
 class Button:
-    rect: pygame.Rect  # прямоугольник кнопки
-    fill_color: pygame.Color = dataclasses.field(default_factory=lambda: pygame.Color(WHITE))  # цвет заливки
-    outline_width: int = 0  # ширина обводки
-    outline_color: pygame.Color = dataclasses.field(default_factory=lambda: pygame.Color(WHITE))  # цвет обводки
+    """Этот класс описывает кнопку на экране (без текста)."""
+    rect: pygame.Rect
+    """Прямоугольник кнопки."""
+    fill_color: pygame.Color = dataclasses.field(default_factory=lambda: pygame.Color(WHITE))
+    """Цвет заливки."""
+    outline_width: int = 0
+    """Ширина обводки."""
+    outline_color: pygame.Color = dataclasses.field(default_factory=lambda: pygame.Color(WHITE))
+    """Цвет обводки."""
 
-    # отрисовывает кнопку на экран
     def draw(self):
+        """Отрисовывает кнопку на экране."""
         pygame.draw.rect(screen, self.fill_color, self.rect)
         pygame.draw.rect(screen, self.outline_color, self.rect, self.outline_width)
     
-    # проверяет находится ли точка point в кнопке
     def contains_point(self, point: tuple[int, int]) -> bool:
+        """Проверяет находится ли курсор внутри кнопки."""
         return self.rect.collidepoint(point)
 
 @dataclasses.dataclass
 class Text:
-    origin: tuple[int, int]  # точка - центр текста
-    font: pygame.font.Font  # шрифт текста
-    text: str = "Это Текст!"  # текст
-    width: int = -1  # ширина по которой разделять на строки
-    color: pygame.Color = dataclasses.field(default_factory=lambda: pygame.Color(BLACK))  # цвет текста
-    should_center: bool = True  # центрировать ли текст
+    """Этот класс описывает текст на экране."""
+    origin: tuple[int, int]
+    """Точка - основание текста."""
+    font: pygame.font.Font
+    """Шрифт текста."""
+    text: str = "Это Текст!"
+    """Текст."""
+    width: int = -1
+    """Ширина по которой разделять текст на отдельные строки.
+    
+    Если это значение меньше нуля, то ширина текста не влияет на разделение по строкам."""
+    color: pygame.Color = dataclasses.field(default_factory=lambda: pygame.Color(BLACK))
+    """Цвет текста."""
+    should_center: bool = True
+    """Нужно ли центрировать текст относительно его основания."""
 
-    # отрисовывает текст на экран
     def draw(self):
+        """отрисовывает текст на экран"""
         current_y = self.origin[1]
         for line in self.wrap_text():
             text_surface = self.font.render(line, True, self.color)
@@ -85,6 +184,7 @@ class Text:
             current_y += text_surface.get_height()
     
     def wrap_text(self):
+        """разбивает текст на отдельные строки"""
         newlines = self.text.split('\n')
 
         lines = []
@@ -124,10 +224,7 @@ class Game:
         self.state = MENU
         self.day = 1
         self.max_days = 5
-        self.food = 0
-        self.health = 100
-        self.morale = 100
-        self.ice_stability = 100
+        self.stats: PlayerStats
         self.story_progress = 0
         self.current_scene = None
         self.choices = []
@@ -184,115 +281,209 @@ class Game:
     
     def load_story(self):
         self.story_scenes = [
-            # День 1
-            {
-                'text': f"День 1. {self.date.strftime('%d.%m.%Y')}\nВы загружаете грузовик на базе. Сколько продовольствия взять?",
-                'image': 'scene1',
-                'sound': 'engine',
-                'choices': [
-                    {"text": "Максимальный груз (250 кг, риск провалиться под лёд)", 
-                     "effect": {"success": "Вы загрузили максимальный груз. Будьте осторожны!", 
-                               "fail": None, 
-                               "food": 250, "health": -20, "morale": -10}},
-                    {"text": "Средний груз (150 кг, баланс риска и пользы)", 
-                     "effect": {"success": "Вы загрузили средний груз. Разумный выбор.", 
-                               "fail": None, 
-                               "food": 150, "health": -10, "morale": -5}},
-                    {"text": "Минимальный груз (50 кг, безопасно, но мало еды)", 
-                     "effect": {"success": "Вы взяли минимальный груз. Городу будет тяжело...", 
-                               "fail": None, 
-                               "food": 50, "health": 0, "morale": 0}}
+            Scene(
+                text=f"День 1. {self.date.strftime('%d.%m.%Y')}\nВы загружаете грузовик на базе. Сколько продовольствия взять?",
+                background=self.create_image((80, 80, 100)),  # grey
+                sound=None,
+                choices=[
+                    Choice(
+                        text="Максимальный груз (250 кг, риск провалиться под лёд)",
+                        consequence=SimpleConsequence(
+                            text="Вы загрузили максимальный груз. Будьте осторожны!",
+                            modifier=PlayerStatsModifier(250, -20, -10)
+                        )
+                    ),
+                    Choice(
+                        text="Средний груз (150 кг, баланс риска и пользы)",
+                        consequence=SimpleConsequence(
+                            text="Вы загрузили средний груз. Разумный выбор.",
+                            modifier=PlayerStatsModifier(150, -10, -5)
+                        )
+                    ),
+                    Choice(
+                        text="Минимальный груз (50 кг, безопасно, но мало еды)",
+                        consequence=SimpleConsequence(
+                            "Вы взяли минимальный груз. Городу будет тяжело...",
+                            PlayerStatsModifier(50, 0, 0)
+                        )
+                    )
                 ]
-            },
-            {
-                'text': "День 1. Вы движетесь по льду Ладожского озера. Впереди трещина во льду. Что делать?",
-                'image': 'scene2',
-                'sound': 'ice_crack',
-                'choices': [
-                    {"text": "Проехать быстро (риск провалиться)", 
-                     "effect": {"success": "Вы успешно проехали трещину на скорости!", 
-                               "fail": "Грузовик провалился под лёд! Вы потеряли весь груз.", 
-                               "risk": 0.4, "food_loss": 1.0, "health_loss": 30}},
-                    {"text": "Проехать медленно (безопаснее)", 
-                     "effect": {"success": "Вы осторожно пересекли трещину.", 
-                               "fail": "Лёд треснул, но вы успели проехать! Часть груза повреждена.", 
-                               "risk": 0.2, "food_loss": 0.3, "health_loss": 10}},
-                    {"text": "Объехать (потеря времени, -10% боевого духа)", 
-                     "effect": {"success": "Вы выбрали безопасный путь, потеряв время.", 
-                               "fail": None, 
-                               "food": 0, "health": 0, "morale": -10}}
+            ),
+            Scene(
+                text="День 1. Вы движетесь по льду Ладожского озера. Впереди трещина во льду. Что делать?",
+                background=self.create_image((70, 90, 80)),  # cold
+                sound=None,
+                choices=[
+                    Choice(
+                        text="Проехать быстро (риск провалиться)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.4, 
+                            success=SimpleConsequence(
+                                text="Вы успешно проехали трещину на скорости!",
+                                modifier=PlayerStatsModifier(0, 10, 10)
+                            ), 
+                            failure=SimpleConsequence(
+                                text="Грузовик провалился под лёд! Вы потеряли весь груз.",
+                                modifier=PlayerStatsModifier(-250, -30, 0)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Проехать медленно (безопаснее)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.2, 
+                            success=SimpleConsequence(
+                                text="Вы осторожно пересекли трещину.",
+                                modifier=PlayerStatsModifier(0, 0, 0)
+                            ),
+                            failure=SimpleConsequence(
+                                text="Лёд треснул, но вы успели проехать! Часть груза повреждена.",
+                                modifier=PlayerStatsModifier(30, -10, 0)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Объехать (потеря времени, -10% боевого духа)",
+                        consequence=SimpleConsequence(
+                            text="Вы выбрали безопасный путь, потеряв время.",
+                            modifier=PlayerStatsModifier(0, 0, -10)
+                        )
+                    )
                 ]
-            },
-            # День 2
-            {
-                'text': f"День 2. {(self.date + timedelta(days=1)).strftime('%d.%m.%Y')}\nВ небе появляются немецкие самолёты!",
-                'image': 'scene5',
-                'sound': 'explosion',
-                'choices': [
-                    {"text": "Ускориться и попытаться уехать", 
-                     "effect": {"success": "Вам удалось уйти от бомбёжки!", 
-                               "fail": "Прямое попадание! Грузовик уничтожен.", 
-                               "risk": 0.5, "food_loss": 1.0, "health_loss": 50}},
-                    {"text": "Остановиться и замаскироваться", 
-                     "effect": {"success": "Самолёты вас не заметили.", 
-                               "fail": "Бомбы упали рядом, грузовик повреждён.", 
-                               "risk": 0.3, "food_loss": 0.5, "health_loss": 20}},
-                    {"text": "Продолжить движение как есть", 
-                     "effect": {"success": "Самолёты пролетели мимо.", 
-                               "fail": "Бомба попала в грузовик!", 
-                               "risk": 0.7, "food_loss": 0.8, "health_loss": 40}}
+            ),
+            Scene(
+                text=f"День 2. {(self.date + timedelta(days=1)).strftime('%d.%m.%Y')}\nВ небе появляются немецкие самолёты!",
+                background=self.create_image((90, 60, 70)),  # red
+                sound=None,
+                choices=[
+                    Choice(
+                        text="Ускориться и попытаться уехать",
+                        consequence=RiskBasedConsequence(
+                            risk=0.5,
+                            success=SimpleConsequence(
+                                text="Вам удалось уйти от бомбёжки!",
+                                modifier=PlayerStatsModifier(0, 0, 0)
+                            ), 
+                            failure=SimpleConsequence(
+                                text="Прямое попадание! Грузовик уничтожен.",
+                                modifier=PlayerStatsModifier(-250, -50, 0)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Остановиться и замаскироваться",
+                        consequence=RiskBasedConsequence(
+                            risk=0.3,
+                            success=SimpleConsequence(
+                                text="Самолёты вас не заметили.",
+                                modifier=PlayerStatsModifier(0, 0, 0)
+                            ), 
+                            failure=SimpleConsequence(
+                                text="Бомбы упали рядом, грузовик повреждён.",
+                                modifier=PlayerStatsModifier(-50, -20, 0)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Продолжить движение как есть",
+                        consequence=RiskBasedConsequence(
+                            risk=0.7,
+                            success=SimpleConsequence(
+                                text="Самолёты пролетели мимо.",
+                                modifier=PlayerStatsModifier(0, 0, 0)
+                            ), 
+                            failure=SimpleConsequence(
+                                text="Бомба попала в грузовик!",
+                                modifier=PlayerStatsModifier(-0.8 * 250, -40, 0)
+                            )
+                        )
+                    ),
                 ]
-            },
-            # День 3
-            {
-                'text': f"День 3. {(self.date + timedelta(days=2)).strftime('%d.%m.%Y')}\nВы встретили колонну грузовиков. Командир предлагает объединиться.",
-                'image': 'scene4',
-                'choices': [
-                    {"text": "Присоединиться к колонне (+10% боевого духа)", 
-                     "effect": {"success": "Вы присоединились к колонне. Движение безопаснее.", 
-                               "fail": None, 
-                               "food": 0, "health": 0, "morale": 10}},
-                    {"text": "Продолжить самостоятельно (риск нападения)", 
-                     "effect": {"success": "Вы благополучно доехали одни.", 
-                               "fail": "На вас напали! Часть груза украдена.", 
-                               "risk": 0.3, "food_loss": 0.4, "health_loss": 15}}
+            ),
+            Scene(
+                text=f"День 3. {(self.date + timedelta(days=2)).strftime('%d.%m.%Y')}\nВы встретили колонну грузовиков. Командир предлагает объединиться.",
+                background=self.create_image((60, 80, 90)),  # unknown?
+                sound=None,
+                choices=[
+                    Choice(
+                        text="Присоединиться к колонне (+10% боевого духа)",
+                        consequence=SimpleConsequence(
+                            text="Вы присоединились к колонне. Движение безопаснее.",
+                            modifier=PlayerStatsModifier(0, 0, 10),
+                        )
+                    ),
+                    Choice(
+                        text="Продолжить самостоятельно (риск нападения)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.3,
+                            success=SimpleConsequence(
+                                text="Вы благополучно доехали одни.",
+                                modifier=PlayerStatsModifier(0, 0, 0)
+                            ),
+                            failure=SimpleConsequence(
+                                text="На вас напали! Часть груза украдена.",
+                                modifier=PlayerStatsModifier(-0.4 * 250, -15, 0)
+                            )
+                        )
+                    )
                 ]
-            },
-            # День 4
-            {
-                'text': f"День 4. {(self.date + timedelta(days=3)).strftime('%d.%m.%Y')}\nНачалась сильная метель! Видимость практически нулевая.",
-                'image': 'scene4',
-                'choices': [
-                    {"text": "Остановиться и переждать (потеря времени, -10 кг продовольствия)", 
-                     "effect": {"success": "Вы переждали метель, потеряв немного времени.", 
-                               "fail": None, 
-                               "food": -10, "health": 0, "morale": 0}},
-                    {"text": "Продолжить движение (высокий риск аварии)", 
-                     "effect": {"success": "Вы благополучно преодолели метель.", 
-                               "fail": "Вы съехали с трассы! Грузовик застрял.", 
-                               "risk": 0.6, "food_loss": 0.5, "health_loss": 20}}
+            ),
+            Scene(
+                text=f"День 4. {(self.date + timedelta(days=3)).strftime('%d.%m.%Y')}\nНачалась сильная метель! Видимость практически нулевая.",
+                background=self.create_image((60, 80, 90)),  # blue, snow storm
+                sound=None,
+                choices=[
+                    Choice(
+                        text="Остановиться и переждать (потеря времени, -10 кг продовольствия)",
+                        consequence=SimpleConsequence(
+                            text="Вы переждали метель, потеряв немного времени.",
+                            modifier=PlayerStatsModifier(-10, 0, 0)
+                        )
+                    ),
+                    Choice(
+                        text="Продолжить движение (высокий риск аварии)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.6,
+                            success=SimpleConsequence(
+                                text="Вы благополучно преодолели метель.",
+                                modifier=PlayerStatsModifier(0, 0, 0)
+                            ),
+                            failure=SimpleConsequence(
+                                text="Вы съехали с трассы! Грузовик застрял.",
+                                modifier=PlayerStatsModifier(-0.5 * 250, -20, 0)
+                            )
+                        )
+                    )
                 ]
-            },
-            # День 5
-            {
-                'text': f"День 5. {(self.date + timedelta(days=4)).strftime('%d.%m.%Y')}\nВы прибыли в Ленинград. Голодные жители смотрят на ваш грузовик.",
-                'image': 'scene3',
-                'sound': None,
-                'choices': [
-                    {"text": "Раздать всё продовольствие (+30% боевого духа)", 
-                     "effect": {"success": "Вы раздали весь груз. Люди благодарны вам!", 
-                               "fail": None, 
-                               "food": 0, "health": 0, "morale": 30}},
-                    {"text": "Раздать половину (остальное на следующий рейс, +15% боевого духа)", 
-                     "effect": {"success": "Вы раздали половину груза, сохранив часть на будущее.", 
-                               "fail": None, 
-                               "food": self.food//2, "health": 0, "morale": 15}},
-                    {"text": "Сохранить большую часть (для следующего рейса, +5% боевого духа)", 
-                     "effect": {"success": "Вы сохранили большую часть груза для следующего рейса.", 
-                               "fail": None, 
-                               "food": int(self.food*0.8), "health": 0, "morale": 5}}
+            ),
+            Scene(
+                text=f"День 5. {(self.date + timedelta(days=4)).strftime('%d.%m.%Y')}\nВы прибыли в Ленинград. Голодные жители смотрят на ваш грузовик.",
+                background=self.create_image((90, 70, 80)),  # warm, city
+                sound=None,
+                choices=[
+                    Choice(
+                        text="Раздать всё продовольствие (+30% боевого духа)",
+                        consequence=SimpleConsequence(
+                            text="Вы раздали весь груз. Люди благодарны вам!",
+                            modifier=PlayerStatsModifier(0, 0, 30)
+                        )
+                    ),
+                    Choice(
+                        text="Раздать половину (остальное на следующий рейс, +15% боевого духа)",
+                        consequence=SimpleConsequence(
+                            text="Вы раздали половину груза, сохранив часть на будущее.",
+                            modifier=PlayerStatsModifier(50, 0, 15)
+                        )
+                    ),
+                    Choice(
+                        text="Сохранить большую часть (для следующего рейса, +5% боевого духа)",
+                        consequence=SimpleConsequence(
+                            text="Вы сохранили большую часть груза для следующего рейса.",
+                            modifier=PlayerStatsModifier(-20, 0, 5)
+                        )
+                    )
                 ]
-            }
+            )
         ]
     
     def load_history_facts(self):
@@ -378,10 +569,7 @@ class Game:
     
     def start_game(self):
         self.day = 1
-        self.food = 0
-        self.health = 100
-        self.morale = 100
-        self.ice_stability = 100
+        self.stats = PlayerStats(0, 100, 100)
         self.date = BLOCKADE_START
         self.state = DAY_START
         self.story_progress = 0
@@ -393,37 +581,15 @@ class Game:
         if self.story_progress >= len(self.story_scenes):
             self.story_progress = len(self.story_scenes) - 1
         self.current_scene = self.story_scenes[self.story_progress]
-        self.choices = self.current_scene['choices']
+        self.choices = self.current_scene.choices
         self.waiting_for_choice = True
     
     def process_choice(self, choice_index):
         if not self.waiting_for_choice or choice_index >= len(self.choices):
             return
-            
-        choice = self.choices[choice_index]
-        effect = choice['effect']
         
         self.waiting_for_choice = False
-        
-        # Обработка выбора без риска
-        if 'risk' not in effect:
-            self.result_text = effect['success']
-            self.food = max(0, self.food + effect.get('food', 0))
-            self.health = max(0, min(100, self.health + effect.get('health', 0)))
-            self.morale = max(0, min(100, self.morale + effect.get('morale', 0)))
-            self.state = SHOW_RESULT
-            return
-        
-        # Обработка рискованного выбора
-        if random.random() > effect['risk']:
-            self.result_text = effect['success']
-            # Награда за успех
-            self.health = min(100, self.health + 10)
-            self.morale = min(100, self.morale + 10)
-        else:
-            self.result_text = effect['fail']
-            self.food = max(0, self.food - int(self.food * effect['food_loss']))
-            self.health = max(0, self.health - effect['health_loss'])
+        self.result_text = self.choices[choice_index].consequence.apply_consequences(self.stats)
         
         self.state = SHOW_RESULT
     
@@ -431,11 +597,11 @@ class Game:
         self.story_progress += 1
         
         # Если сцены закончились, завершаем день
-        if self.story_progress >= len(self.story_scenes) or not self.story_scenes[self.story_progress]['text'].startswith(f"День {self.day}"):
+        if self.story_progress >= len(self.story_scenes) or not self.story_scenes[self.story_progress].text.startswith(f"День {self.day}"):
             self.end_day()
         else:
             self.current_scene = self.story_scenes[self.story_progress]
-            self.choices = self.current_scene['choices']
+            self.choices = self.current_scene.choices
             self.waiting_for_choice = True
             self.state = GAME
     
@@ -459,12 +625,12 @@ class Game:
             self.show_history_fact()
     
     def check_game_state(self):
-        if self.health <= 0:
+        if self.stats.health <= 0:
             self.game_over("Ваше здоровье ухудшилось слишком сильно...")
-        elif self.morale <= 0:
+        elif self.stats.morale <= 0:
             self.game_over("Вы потеряли волю к продолжению...")
-        elif self.ice_stability <= 0:
-            self.game_over("Лёд стал слишком опасным для движения...")
+        # elif self.ice_stability <= 0:
+        #     self.game_over("Лёд стал слишком опасным для движения...")
     
     def game_over(self, reason):
         self.state = GAME_OVER
@@ -538,8 +704,8 @@ class Game:
         ).draw()
     
     def draw_game(self):
-        if self.current_scene and 'image' in self.current_scene:
-            screen.blit(self.images[self.current_scene['image']], (0, 0))
+        if self.current_scene and self.current_scene.background:
+            screen.blit(self.current_scene.background, (0, 0))
         else:
             screen.fill(GRAY)
         
@@ -552,7 +718,7 @@ class Game:
                 origin=(50, 30),
                 width=WIDTH - 100,
                 font=font_small,
-                text=self.current_scene['text'],
+                text=self.current_scene.text,
                 color=WHITE,
                 should_center=False
             ).draw()
@@ -571,13 +737,13 @@ class Game:
                     origin=(WIDTH//2, HEIGHT//2 + i * 90),
                     width=WIDTH//2,
                     font=font_small,
-                    text=choice['text'],
+                    text=choice.text,
                     color=WHITE
                 ).draw()
     
     def draw_result(self):
-        if self.current_scene and 'image' in self.current_scene:
-            screen.blit(self.images[self.current_scene['image']], (0, 0))
+        if self.current_scene and self.current_scene.background:
+            screen.blit(self.current_scene.background, (0, 0))
         else:
             screen.fill(GRAY)
         
@@ -643,38 +809,38 @@ class Game:
         food_x = bar_width
         Text(
             origin=(food_x, HEIGHT - 70),
-            text=f"Продовольствие: {self.food} кг",
+            text=f"Продовольствие: {self.stats.food} кг",
             font=font_small,
             color=WHITE,
             should_center=False
         ).draw()
         pygame.draw.rect(screen, GRAY, (food_x, bar_y, bar_width - 20, bar_height))
-        food_value = min(1.0, self.food / 250)  # Ограничение до 100%
+        food_value = min(1.0, self.stats.food / 250)  # Ограничение до 100%
         pygame.draw.rect(screen, GOLD, (food_x, bar_y, (bar_width - 20) * food_value, bar_height))
         
         health_x = bar_width * 2
         Text(
             origin=(health_x, HEIGHT - 70),
-            text=f"Здоровье: {self.health}%",
+            text=f"Здоровье: {self.stats.health}%",
             font=font_small,
             color=WHITE,
             should_center=False
         ).draw()
         pygame.draw.rect(screen, GRAY, (health_x, bar_y, bar_width - 20, bar_height))
-        health_color = (0, 255, 0) if self.health > 50 else (255, 165, 0) if self.health > 25 else (255, 0, 0)
-        health_value = self.health / 100
+        health_color = (0, 255, 0) if self.stats.health > 50 else (255, 165, 0) if self.stats.health > 25 else (255, 0, 0)
+        health_value = self.stats.health / 100
         pygame.draw.rect(screen, health_color, (health_x, bar_y, (bar_width - 20) * health_value, bar_height))
         
         morale_x = bar_width * 3
         Text(
             origin=(morale_x, HEIGHT - 70),
-            text=f"Боевой дух: {self.morale}%",
+            text=f"Боевой дух: {self.stats.morale}%",
             font=font_small,
             color=WHITE,
             should_center=False
         ).draw()
         pygame.draw.rect(screen, GRAY, (morale_x, bar_y, bar_width - 20, bar_height))
-        morale_value = self.morale / 100
+        morale_value = self.stats.morale / 100
         pygame.draw.rect(screen, BLUE, (morale_x, bar_y, (bar_width - 20) * morale_value, bar_height))
     
     def draw_history_fact(self):
