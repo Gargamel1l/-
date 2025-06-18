@@ -3,6 +3,7 @@ import sys
 import random
 from pygame import mixer
 from datetime import datetime, timedelta
+import dataclasses
 
 # Инициализация Pygame
 pygame.init()
@@ -15,13 +16,13 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
 pygame.display.set_caption("Дорога жизни")
 
 # Цвета
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY = (100, 100, 100)
-BLUE = (50, 50, 150)
-RED = (150, 50, 50)
-DARK_RED = (100, 0, 0)
-GOLD = (218, 165, 32)
+WHITE = pygame.Color(255, 255, 255)
+BLACK = pygame.Color(0, 0, 0)
+GRAY = pygame.Color(100, 100, 100)
+BLUE = pygame.Color(50, 50, 150)
+RED = pygame.Color(150, 50, 50)
+DARK_RED = pygame.Color(100, 0, 0)
+GOLD = pygame.Color(218, 165, 32)
 
 # Шрифты (адаптивные размеры)
 font_large = pygame.font.SysFont('arial', HEIGHT // 20)
@@ -45,10 +46,73 @@ BLOCKADE_END = datetime(1944, 1, 27)
 # Ограничение частоты кадров
 MAX_FPS = 30
 
+@dataclasses.dataclass
+class Button:
+    rect: pygame.Rect  # прямоугольник кнопки
+    fill_color: pygame.Color = dataclasses.field(default_factory=lambda: pygame.Color(WHITE))  # цвет заливки
+    outline_width: int = 0  # ширина обводки
+    outline_color: pygame.Color = dataclasses.field(default_factory=lambda: pygame.Color(WHITE))  # цвет обводки
+
+    # отрисовывает кнопку на экран
+    def draw(self):
+        pygame.draw.rect(screen, self.fill_color, self.rect)
+        pygame.draw.rect(screen, self.outline_color, self.rect, self.outline_width)
+    
+    # проверяет находится ли точка point в кнопке
+    def contains_point(self, point: tuple[int, int]) -> bool:
+        return self.rect.collidepoint(point)
+
+@dataclasses.dataclass
+class Text:
+    origin: tuple[int, int]  # точка - центр текста
+    font: pygame.font.Font  # шрифт текста
+    text: str = "Это Текст!"  # текст
+    width: int = -1  # ширина по которой разделять на строки
+    color: pygame.Color = dataclasses.field(default_factory=lambda: pygame.Color(BLACK))  # цвет текста
+    should_center: bool = True  # центрировать ли текст
+
+    # отрисовывает текст на экран
+    def draw(self):
+        current_y = self.origin[1]
+        for line in self.wrap_text():
+            text_surface = self.font.render(line, True, self.color)
+            if self.should_center:
+                x = self.origin[0] - text_surface.get_width()//2
+            else:
+                x = self.origin[0]
+
+            screen.blit(text_surface, (x, current_y))
+            current_y += text_surface.get_height()
+    
+    def wrap_text(self):
+        if self.width <= 0:
+            return [self.text]
+
+        words = self.text.split(' ')
+        lines = []
+        current_line = []
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            test_width = self.font.size(test_line)[0]
+            
+            if test_width < self.width:
+                current_line.append(word)
+            else:
+                lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return lines
+
+
 class Game:
     def __init__(self):
         self.is_running = True  # Должна ли игра продолжать работать
         self.fps_clock = pygame.time.Clock()  # Часы для ограничения частоты кадров
+        self.buttons: list[Button] = []
         self.state = MENU
         self.day = 1
         self.max_days = 5
@@ -279,6 +343,31 @@ class Game:
         pygame.display.flip()
         self.fps_clock.tick(MAX_FPS)
     
+    def handle_click(self, pos):
+        if self.state == MENU:
+            if WIDTH//2 - 150 <= pos[0] <= WIDTH//2 + 150 and HEIGHT//2 <= pos[1] <= HEIGHT//2 + 50:
+                self.start_game()
+        
+        elif self.state == DAY_START:
+            if WIDTH//2 - 150 <= pos[0] <= WIDTH//2 + 150 and HEIGHT//2 + 100 <= pos[1] <= HEIGHT//2 + 150:
+                self.start_day()
+        
+        elif self.state == GAME and self.waiting_for_choice and self.choices:
+            for i in range(len(self.choices)):
+                btn_rect = pygame.Rect(WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80)
+                if btn_rect.collidepoint(pos):
+                    self.process_choice(i)
+                    break
+        
+        elif self.state == HISTORY_FACT:
+            if WIDTH//2 - 100 <= pos[0] <= WIDTH//2 + 100 and HEIGHT - 100 <= pos[1] <= HEIGHT - 50:
+                self.state = DAY_START
+        
+        elif self.state == SHOW_RESULT:
+            if WIDTH//2 - 150 <= pos[0] <= WIDTH//2 + 150 and HEIGHT - 200 <= pos[1] <= HEIGHT - 150:
+                self.next_scene()
+                self.check_game_state()
+    
     def start_game(self):
         self.day = 1
         self.food = 0
@@ -380,14 +469,32 @@ class Game:
         overlay.fill((0, 0, 0, 150))
         screen.blit(overlay, (0, 0))
         
-        title = font_large.render("ДОРОГА ЖИЗНИ", True, GOLD)
-        subtitle = font_medium.render("Блокада Ленинграда 1941-1944", True, WHITE)
-        screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//4))
-        screen.blit(subtitle, (WIDTH//2 - subtitle.get_width()//2, HEIGHT//4 + 50))
-        
-        start_btn = font_medium.render("НАЧАТЬ ИГРУ", True, WHITE)
-        pygame.draw.rect(screen, DARK_RED, (WIDTH//2 - 150, HEIGHT//2, 300, 50))
-        screen.blit(start_btn, (WIDTH//2 - start_btn.get_width()//2, HEIGHT//2 + 15))
+        Text(
+            origin=(WIDTH//2, HEIGHT//4),
+            font=font_large,
+            text="ДОРОГА ЖИЗНИ",
+            color=GOLD
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT//4 + 50),
+            font=font_medium,
+            text="Блокада Ленинграда 1941-1944",
+            color=WHITE
+        ).draw()
+
+        Button(
+            rect=pygame.Rect(WIDTH//2 - 150, HEIGHT//2, 300, 50),
+            fill_color=DARK_RED,
+            outline_width=2,
+            outline_color=BLACK
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT//2),
+            width=300,
+            font=font_medium,
+            text="НАЧАТЬ ИГРУ",
+            color=WHITE
+        ).draw()
     
     def draw_day_start(self):
         screen.blit(self.images['scene1'], (0, 0))
@@ -395,16 +502,32 @@ class Game:
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
-        
-        title = font_large.render(f"ДЕНЬ {self.day}", True, GOLD)
-        date_text = font_medium.render(self.date.strftime("%d.%m.%Y"), True, WHITE)
-        start_btn = font_medium.render("НАЧАТЬ ДЕНЬ", True, WHITE)
-        
-        screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//3))
-        screen.blit(date_text, (WIDTH//2 - date_text.get_width()//2, HEIGHT//2))
-        
-        pygame.draw.rect(screen, BLUE, (WIDTH//2 - 150, HEIGHT//2 + 100, 300, 50))
-        screen.blit(start_btn, (WIDTH//2 - start_btn.get_width()//2, HEIGHT//2 + 115))
+
+        Text(
+            origin=(WIDTH//2, HEIGHT//3),
+            font=font_large,
+            text=f"ДЕНЬ {self.day}",
+            color=GOLD
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT//2),
+            font=font_medium,
+            text=self.date.strftime("%d.%m.%Y"),
+            color=WHITE
+        ).draw()
+        Button(
+            rect=pygame.Rect(WIDTH//2 - 150, HEIGHT//2 + 100, 300, 50),
+            fill_color=BLUE,
+            outline_width=2,
+            outline_color=BLACK
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT//2 + 100),
+            width=300,
+            font=font_medium,
+            text="НАЧАТЬ ДЕНЬ",
+            color=WHITE
+        ).draw()
     
     def draw_game(self):
         if self.current_scene and 'image' in self.current_scene:
@@ -417,24 +540,32 @@ class Game:
         screen.blit(text_bg, (20, 20))
         
         if self.current_scene:
-            text_lines = self.wrap_text(self.current_scene['text'], font_small, WIDTH - 100)
-            for i, line in enumerate(text_lines):
-                text_surf = font_small.render(line, True, WHITE)
-                screen.blit(text_surf, (50, 30 + i * 30))
+            Text(
+                origin=(50, 30),
+                width=WIDTH - 100,
+                font=font_small,
+                text=self.current_scene['text'],
+                color=WHITE,
+                should_center=False
+            ).draw()
         
         self.draw_status_bar()
         
         if self.waiting_for_choice and self.choices:
             for i, choice in enumerate(self.choices):
-                btn_color = DARK_RED if i % 2 == 0 else BLUE
-                btn_rect = pygame.Rect(WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80)
-                pygame.draw.rect(screen, btn_color, btn_rect)
-                pygame.draw.rect(screen, BLACK, btn_rect, 2)
-                
-                choice_lines = self.wrap_text(choice['text'], font_small, WIDTH//2 - 50)
-                for j, line in enumerate(choice_lines):
-                    choice_text = font_small.render(line, True, WHITE)
-                    screen.blit(choice_text, (btn_rect.x + 20, btn_rect.y + 20 + j * 30))
+                Button(
+                    rect=pygame.Rect(WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80),
+                    fill_color=DARK_RED if i % 2 == 0 else BLUE,
+                    outline_width=2,
+                    outline_color=BLACK
+                ).draw()
+                Text(
+                    origin=(WIDTH//2, HEIGHT//2 + i * 90),
+                    width=WIDTH//2,
+                    font=font_small,
+                    text=choice['text'],
+                    color=WHITE
+                ).draw()
     
     def draw_result(self):
         if self.current_scene and 'image' in self.current_scene:
@@ -446,17 +577,29 @@ class Game:
         text_bg.fill((0, 0, 0, 180))
         screen.blit(text_bg, (20, 20))
         
-        result_lines = self.wrap_text(self.result_text, font_small, WIDTH - 100)
-        for i, line in enumerate(result_lines):
-            text_surf = font_small.render(line, True, WHITE)
-            screen.blit(text_surf, (50, 30 + i * 30))
+        Text(
+            origin=(50, 30),
+            width=WIDTH - 100,
+            font=font_small,
+            text=self.result_text,
+            color=WHITE,
+            should_center=False
+        ).draw()
         
         self.draw_status_bar()
         
-        continue_btn = font_medium.render("ПРОДОЛЖИТЬ", True, WHITE)
-        continue_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 100, 200, 50)
-        pygame.draw.rect(screen, BLUE, continue_rect)
-        screen.blit(continue_btn, (WIDTH//2 - continue_btn.get_width()//2, HEIGHT - 85))
+        Button(
+            rect=pygame.Rect(WIDTH//2 - 150, HEIGHT - 200, 300, 50),
+            fill_color=BLUE,
+            outline_width=2,
+            outline_color=BLACK
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT - 200),
+            font=font_medium,
+            text="ПРОДОЛЖИТЬ",
+            color=WHITE
+        ).draw()
     
     def draw_status_bar(self):
         pygame.draw.rect(screen, BLACK, (0, HEIGHT - 80, WIDTH, 80))
@@ -466,31 +609,65 @@ class Game:
         bar_height = 15
         bar_y = HEIGHT - 40
         
-        date_text = font_small.render(f"{self.date.strftime('%d.%m.%Y')}", True, WHITE)
-        screen.blit(date_text, (20, HEIGHT - 70))
+        Text(
+            origin=(20, HEIGHT - 70),
+            text=self.date.strftime('%d.%m.%Y'),
+            font=font_small,
+            color=WHITE,
+            should_center=False
+        ).draw()
+        Text(
+            origin=(20, HEIGHT - 40),
+            text=f"День: {self.day}/{self.max_days}",
+            font=font_small,
+            color=WHITE,
+            should_center=False
+        ).draw()
+
+        Text(
+            origin=(20, HEIGHT - 40),
+            text=f"День: {self.day}/{self.max_days}",
+            font=font_small,
+            color=WHITE,
+            should_center=False
+        ).draw()
         
-        day_text = font_small.render(f"День: {self.day}/{self.max_days}", True, WHITE)
-        screen.blit(day_text, (20, HEIGHT - 40))
-        
-        food_text = font_small.render(f"Продовольствие: {self.food} кг", True, WHITE)
         food_x = bar_width
-        screen.blit(food_text, (food_x, HEIGHT - 70))
+        Text(
+            origin=(food_x, HEIGHT - 70),
+            text=f"Продовольствие: {self.food} кг",
+            font=font_small,
+            color=WHITE,
+            should_center=False
+        ).draw()
         pygame.draw.rect(screen, GRAY, (food_x, bar_y, bar_width - 20, bar_height))
         food_value = min(1.0, self.food / 250)  # Ограничение до 100%
         pygame.draw.rect(screen, GOLD, (food_x, bar_y, (bar_width - 20) * food_value, bar_height))
         
-        health_text = font_small.render(f"Здоровье: {self.health}%", True, WHITE)
         health_x = bar_width * 2
-        screen.blit(health_text, (health_x, HEIGHT - 70))
+        Text(
+            origin=(health_x, HEIGHT - 70),
+            text=f"Здоровье: {self.health}%",
+            font=font_small,
+            color=WHITE,
+            should_center=False
+        ).draw()
         pygame.draw.rect(screen, GRAY, (health_x, bar_y, bar_width - 20, bar_height))
         health_color = (0, 255, 0) if self.health > 50 else (255, 165, 0) if self.health > 25 else (255, 0, 0)
-        pygame.draw.rect(screen, health_color, (health_x, bar_y, (bar_width - 20) * (self.health / 100), bar_height))
+        health_value = self.health / 100
+        pygame.draw.rect(screen, health_color, (health_x, bar_y, (bar_width - 20) * health_value, bar_height))
         
-        morale_text = font_small.render(f"Боевой дух: {self.morale}%", True, WHITE)
         morale_x = bar_width * 3
-        screen.blit(morale_text, (morale_x, HEIGHT - 70))
+        Text(
+            origin=(morale_x, HEIGHT - 70),
+            text=f"Боевой дух: {self.morale}%",
+            font=font_small,
+            color=WHITE,
+            should_center=False
+        ).draw()
         pygame.draw.rect(screen, GRAY, (morale_x, bar_y, bar_width - 20, bar_height))
-        pygame.draw.rect(screen, BLUE, (morale_x, bar_y, (bar_width - 20) * (self.morale / 100), bar_height))
+        morale_value = self.morale / 100
+        pygame.draw.rect(screen, BLUE, (morale_x, bar_y, (bar_width - 20) * morale_value, bar_height))
     
     def draw_history_fact(self):
         screen.blit(self.images[self.current_history_fact['image']], (0, 0))
@@ -499,87 +676,85 @@ class Game:
         overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
         
-        title = font_large.render("ИСТОРИЧЕСКАЯ СПРАВКА", True, GOLD)
-        screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
-        
-        fact_lines = self.wrap_text(self.current_history_fact['text'], font_historical, WIDTH - 100)
-        for i, line in enumerate(fact_lines):
-            line_surf = font_historical.render(line, True, WHITE)
-            screen.blit(line_surf, (50, 150 + i * 40))
-        
-        continue_btn = font_medium.render("ПРОДОЛЖИТЬ", True, WHITE)
-        continue_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 100, 200, 50)
-        pygame.draw.rect(screen, BLUE, continue_rect)
-        screen.blit(continue_btn, (WIDTH//2 - continue_btn.get_width()//2, HEIGHT - 85))
+        Text(
+            origin=(WIDTH//2, 50),
+            text="ИСТОРИЧЕСКАЯ СПРАВКА",
+            font=font_large,
+            color=GOLD
+        ).draw()
+
+        Text(
+            origin=(50, 150),
+            width=WIDTH - 100,
+            text=self.current_history_fact['text'],
+            font=font_historical,
+            color=WHITE,
+            should_center=False
+        ).draw()
+
+        Button(
+            rect=pygame.Rect(WIDTH//2 - 100, HEIGHT - 100, 200, 50),
+            fill_color=BLUE,
+            outline_width=2,
+            outline_color=BLACK
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT - 100),
+            text="ПРОДОЛЖИТЬ",
+            font=font_medium,
+            color=WHITE,
+            should_center=True
+        ).draw()
     
     def draw_game_over(self):
         screen.fill(BLACK)
         
-        game_over_text = font_large.render("ИГРА ОКОНЧЕНА", True, RED)
-        reason_text = font_medium.render(self.game_over_reason, True, WHITE)
-        restart_text = font_medium.render("Нажмите R для перезапуска", True, WHITE)
-        
-        screen.blit(game_over_text, (WIDTH//2 - game_over_text.get_width()//2, HEIGHT//3))
-        screen.blit(reason_text, (WIDTH//2 - reason_text.get_width()//2, HEIGHT//2))
-        screen.blit(restart_text, (WIDTH//2 - restart_text.get_width()//2, HEIGHT//2 + 100))
+        Text(
+            origin=(WIDTH//2, HEIGHT//3),
+            text="ИГРА ОКОНЧЕНА",
+            font=font_large,
+            color=RED
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT//2),
+            text=self.game_over_reason,
+            font=font_medium,
+            color=WHITE
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT//2 + 100),
+            text="Нажмите R для перезапуска",
+            font=font_medium,
+            color=WHITE
+        ).draw()
     
     def draw_victory(self):
         screen.fill(BLUE)
         
-        victory_text = font_large.render("ПОБЕДА!", True, GOLD)
-        days_text = font_medium.render(f"Вы продержались {self.max_days} дней!", True, WHITE)
-        result_text = font_medium.render("Ваши усилия помогли спасти жизни ленинградцев.", True, WHITE)
-        restart_text = font_medium.render("Нажмите R для перезапуска", True, WHITE)
-        
-        screen.blit(victory_text, (WIDTH//2 - victory_text.get_width()//2, HEIGHT//3))
-        screen.blit(days_text, (WIDTH//2 - days_text.get_width()//2, HEIGHT//2))
-        screen.blit(result_text, (WIDTH//2 - result_text.get_width()//2, HEIGHT//2 + 50))
-        screen.blit(restart_text, (WIDTH//2 - restart_text.get_width()//2, HEIGHT//2 + 150))
-    
-    def wrap_text(self, text, font, max_width):
-        words = text.split(' ')
-        lines = []
-        current_line = []
-        
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            test_width = font.size(test_line)[0]
-            
-            if test_width < max_width:
-                current_line.append(word)
-            else:
-                lines.append(' '.join(current_line))
-                current_line = [word]
-        
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        return lines
-    
-    def handle_click(self, pos):
-        if self.state == MENU:
-            if WIDTH//2 - 150 <= pos[0] <= WIDTH//2 + 150 and HEIGHT//2 <= pos[1] <= HEIGHT//2 + 50:
-                self.start_game()
-        
-        elif self.state == DAY_START:
-            if WIDTH//2 - 150 <= pos[0] <= WIDTH//2 + 150 and HEIGHT//2 + 100 <= pos[1] <= HEIGHT//2 + 150:
-                self.start_day()
-        
-        elif self.state == GAME and self.waiting_for_choice and self.choices:
-            for i in range(len(self.choices)):
-                btn_rect = pygame.Rect(WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80)
-                if btn_rect.collidepoint(pos):
-                    self.process_choice(i)
-                    break
-        
-        elif self.state == HISTORY_FACT:
-            if WIDTH//2 - 100 <= pos[0] <= WIDTH//2 + 100 and HEIGHT - 100 <= pos[1] <= HEIGHT - 50:
-                self.state = DAY_START
-        
-        elif self.state == SHOW_RESULT:
-            if WIDTH//2 - 100 <= pos[0] <= WIDTH//2 + 100 and HEIGHT - 100 <= pos[1] <= HEIGHT - 50:
-                self.next_scene()
-                self.check_game_state()
+        Text(
+            origin=(WIDTH//2, HEIGHT//3),
+            text="ПОБЕДА!",
+            font=font_large,
+            color=RED
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT//2),
+            text=f"Вы продержались {self.max_days} дней!",
+            font=font_medium,
+            color=WHITE
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT//2 + 50),
+            text="Ваши усилия помогли спасти жизни ленинградцев.",
+            font=font_medium,
+            color=WHITE
+        ).draw()
+        Text(
+            origin=(WIDTH//2, HEIGHT//2 + 100),
+            text="Нажмите R для перезапуска",
+            font=font_medium,
+            color=WHITE
+        ).draw()
     
     def reset_game(self):
         self.__init__()
