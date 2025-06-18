@@ -1,4 +1,3 @@
-#переделай код что он стал рабочим и убери случайные картинки
 import pygame
 import sys
 import random
@@ -247,7 +246,7 @@ class Game:
         self.date = BLOCKADE_START
         self.state = DAY_START
         self.story_progress = 0
-        self.next_scene()
+        self.history_facts_shown = []  # Сброс показанных фактов
     
     def start_day(self):
         self.state = GAME
@@ -265,37 +264,29 @@ class Game:
         choice = self.choices[choice_index]
         effect = choice['effect']
         
-        if callable(effect):
-            effect()
-            return
-            
         self.waiting_for_choice = False
         
         # Обработка выбора без риска
         if 'risk' not in effect:
             self.result_text = effect['success']
-            self.make_choice(effect['food'], effect['health'], effect['morale'])
+            self.food = max(0, self.food + effect.get('food', 0))
+            self.health = max(0, min(100, self.health + effect.get('health', 0)))
+            self.morale = max(0, min(100, self.morale + effect.get('morale', 0)))
+            self.state = SHOW_RESULT
             return
         
         # Обработка рискованного выбора
         if random.random() > effect['risk']:
             self.result_text = effect['success']
-            self.make_choice(0, 10, 10)  # Награда за успех
+            # Награда за успех
+            self.health = min(100, self.health + 10)
+            self.morale = min(100, self.morale + 10)
         else:
             self.result_text = effect['fail']
             self.food = max(0, self.food - int(self.food * effect['food_loss']))
             self.health = max(0, self.health - effect['health_loss'])
-            self.next_scene()
-            self.check_game_state()
         
         self.state = SHOW_RESULT
-    
-    def make_choice(self, food_change, health_change, morale_change):
-        self.food = max(0, self.food + food_change)
-        self.health = max(0, min(100, self.health + health_change))
-        self.morale = max(0, min(100, self.morale + morale_change))
-        self.next_scene()
-        self.check_game_state()
     
     def next_scene(self):
         self.story_progress += 1
@@ -307,6 +298,7 @@ class Game:
             self.current_scene = self.story_scenes[self.story_progress]
             self.choices = self.current_scene['choices']
             self.waiting_for_choice = True
+            self.state = GAME
     
     def end_day(self):
         self.day += 1
@@ -409,13 +401,14 @@ class Game:
         if self.waiting_for_choice and self.choices:
             for i, choice in enumerate(self.choices):
                 btn_color = DARK_RED if i % 2 == 0 else BLUE
-                pygame.draw.rect(screen, btn_color, (WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80))
-                pygame.draw.rect(screen, BLACK, (WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80), 2)
+                btn_rect = pygame.Rect(WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80)
+                pygame.draw.rect(screen, btn_color, btn_rect)
+                pygame.draw.rect(screen, BLACK, btn_rect, 2)
                 
                 choice_lines = self.wrap_text(choice['text'], font_small, WIDTH//2 - 50)
                 for j, line in enumerate(choice_lines):
                     choice_text = font_small.render(line, True, WHITE)
-                    screen.blit(choice_text, (WIDTH//4 + 20, HEIGHT//2 + 20 + i * 90 + j * 30))
+                    screen.blit(choice_text, (btn_rect.x + 20, btn_rect.y + 20 + j * 30))
     
     def draw_result(self):
         if self.current_scene and 'image' in self.current_scene:
@@ -435,7 +428,8 @@ class Game:
         self.draw_status_bar()
         
         continue_btn = font_medium.render("ПРОДОЛЖИТЬ", True, WHITE)
-        pygame.draw.rect(screen, BLUE, (WIDTH//2 - 100, HEIGHT - 100, 200, 50))
+        continue_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 100, 200, 50)
+        pygame.draw.rect(screen, BLUE, continue_rect)
         screen.blit(continue_btn, (WIDTH//2 - continue_btn.get_width()//2, HEIGHT - 85))
     
     def draw_status_bar(self):
@@ -453,20 +447,24 @@ class Game:
         screen.blit(day_text, (20, HEIGHT - 40))
         
         food_text = font_small.render(f"Продовольствие: {self.food} кг", True, WHITE)
-        screen.blit(food_text, (bar_width, HEIGHT - 70))
-        pygame.draw.rect(screen, GRAY, (bar_width, bar_y, bar_width - 20, bar_height))
-        pygame.draw.rect(screen, GOLD, (bar_width, bar_y, (bar_width - 20) * (self.food / 250), bar_height))
+        food_x = bar_width
+        screen.blit(food_text, (food_x, HEIGHT - 70))
+        pygame.draw.rect(screen, GRAY, (food_x, bar_y, bar_width - 20, bar_height))
+        food_value = min(1.0, self.food / 250)  # Ограничение до 100%
+        pygame.draw.rect(screen, GOLD, (food_x, bar_y, (bar_width - 20) * food_value, bar_height))
         
         health_text = font_small.render(f"Здоровье: {self.health}%", True, WHITE)
-        screen.blit(health_text, (bar_width * 2, HEIGHT - 70))
-        pygame.draw.rect(screen, GRAY, (bar_width * 2, bar_y, bar_width - 20, bar_height))
+        health_x = bar_width * 2
+        screen.blit(health_text, (health_x, HEIGHT - 70))
+        pygame.draw.rect(screen, GRAY, (health_x, bar_y, bar_width - 20, bar_height))
         health_color = (0, 255, 0) if self.health > 50 else (255, 165, 0) if self.health > 25 else (255, 0, 0)
-        pygame.draw.rect(screen, health_color, (bar_width * 2, bar_y, (bar_width - 20) * (self.health / 100), bar_height))
+        pygame.draw.rect(screen, health_color, (health_x, bar_y, (bar_width - 20) * (self.health / 100), bar_height))
         
         morale_text = font_small.render(f"Боевой дух: {self.morale}%", True, WHITE)
-        screen.blit(morale_text, (bar_width * 3, HEIGHT - 70))
-        pygame.draw.rect(screen, GRAY, (bar_width * 3, bar_y, bar_width - 20, bar_height))
-        pygame.draw.rect(screen, BLUE, (bar_width * 3, bar_y, (bar_width - 20) * (self.morale / 100), bar_height))
+        morale_x = bar_width * 3
+        screen.blit(morale_text, (morale_x, HEIGHT - 70))
+        pygame.draw.rect(screen, GRAY, (morale_x, bar_y, bar_width - 20, bar_height))
+        pygame.draw.rect(screen, BLUE, (morale_x, bar_y, (bar_width - 20) * (self.morale / 100), bar_height))
     
     def draw_history_fact(self):
         screen.blit(self.images[self.current_history_fact['image']], (0, 0))
@@ -484,7 +482,8 @@ class Game:
             screen.blit(line_surf, (50, 150 + i * 40))
         
         continue_btn = font_medium.render("ПРОДОЛЖИТЬ", True, WHITE)
-        pygame.draw.rect(screen, BLUE, (WIDTH//2 - 100, HEIGHT - 100, 200, 50))
+        continue_rect = pygame.Rect(WIDTH//2 - 100, HEIGHT - 100, 200, 50)
+        pygame.draw.rect(screen, BLUE, continue_rect)
         screen.blit(continue_btn, (WIDTH//2 - continue_btn.get_width()//2, HEIGHT - 85))
     
     def draw_game_over(self):
@@ -541,8 +540,9 @@ class Game:
                 self.start_day()
         
         elif self.state == GAME and self.waiting_for_choice and self.choices:
-            for i, choice in enumerate(self.choices):
-                if WIDTH//4 <= pos[0] <= WIDTH//4 + WIDTH//2 and HEIGHT//2 + i * 90 <= pos[1] <= HEIGHT//2 + 80 + i * 90:
+            for i in range(len(self.choices)):
+                btn_rect = pygame.Rect(WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80)
+                if btn_rect.collidepoint(pos):
                     self.process_choice(i)
                     break
         
@@ -552,8 +552,8 @@ class Game:
         
         elif self.state == SHOW_RESULT:
             if WIDTH//2 - 100 <= pos[0] <= WIDTH//2 + 100 and HEIGHT - 100 <= pos[1] <= HEIGHT - 50:
-                self.state = GAME
-                self.waiting_for_choice = True
+                self.next_scene()
+                self.check_game_state()
     
     def reset_game(self):
         self.__init__()
