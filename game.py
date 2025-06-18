@@ -238,28 +238,8 @@ class Game:
 
     def load_assets(self):
         # Создаем случайные изображения с тематическими цветами
-        self.images = {
-            'menu_bg': self.create_image((50, 70, 90)),  # Темно-синий
-            'scene1': self.create_image((80, 80, 100)),  # Серый (база)
-            'scene2': self.create_image((70, 90, 80)),   # Холодный (лёд)
-            'scene3': self.create_image((90, 70, 80)),   # Теплый (город)
-            'scene4': self.create_image((60, 80, 90)),   # Синий (метель)
-            'scene5': self.create_image((90, 60, 70)),   # Красный (атака)
-            'history1': self.create_image((70, 70, 90)),
-            'history2': self.create_image((80, 80, 70)),
-            'history3': self.create_image((90, 70, 80))
-        }
-        
-        # Заглушки для звуков
-        self.sounds = {
-            'menu_music': None,
-            'game_music': None,
-            'engine': None,
-            'ice_crack': None,
-            'explosion': None,
-            'success': None,
-            'failure': None
-        }
+        self.menu_background = self.create_image((50, 70, 90))  # Темно-синий
+        self.day_start_background = self.create_image((80, 80, 100))
     
     def create_image(self, base_color):
         """Создает изображение с текстурой"""
@@ -487,22 +467,11 @@ class Game:
         ]
     
     def load_history_facts(self):
+        self.history_facts_background = self.create_image((70, 70, 90))
         self.history_facts = [
-            {
-                'text': "Блокада Ленинграда длилась с 8 сентября 1941 года по 27 января 1944 года (872 дня). Это самая продолжительная и разрушительная блокада в истории человечества.",
-                'image': 'history1',
-                'sound': None
-            },
-            {
-                'text': "Дорога жизни - ледовая трасса через Ладожское озеро. Зимой 1941-1942 по ней доставляли 2000 тонн грузов ежедневно. Каждый рейс был смертельно опасен.",
-                'image': 'history2',
-                'sound': None
-            },
-            {
-                'text': "Норма хлеба для рабочих в ноябре 1941 года составляла 250 грамм в день, для остальных - 125 грамм. Люди умирали от голода прямо на улицах.",
-                'image': 'history3',
-                'sound': None
-            }
+            "Блокада Ленинграда длилась с 8 сентября 1941 года по 27 января 1944 года (872 дня). Это самая продолжительная и разрушительная блокада в истории человечества.",
+            "Дорога жизни - ледовая трасса через Ладожское озеро. Зимой 1941-1942 по ней доставляли 2000 тонн грузов ежедневно. Каждый рейс был смертельно опасен.",
+            "Норма хлеба для рабочих в ноябре 1941 года составляла 250 грамм в день, для остальных - 125 грамм. Люди умирали от голода прямо на улицах."
         ]
 
     def run(self):
@@ -637,7 +606,7 @@ class Game:
         self.game_over_reason = reason
     
     def draw_menu(self):
-        screen.blit(self.images['menu_bg'], (0, 0))
+        screen.blit(self.menu_background, (0, 0))
         
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 150))
@@ -671,7 +640,7 @@ class Game:
         ).draw()
     
     def draw_day_start(self):
-        screen.blit(self.images['scene1'], (0, 0))
+        screen.blit(self.day_start_background, (0, 0))
         
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
@@ -844,7 +813,7 @@ class Game:
         pygame.draw.rect(screen, BLUE, (morale_x, bar_y, (bar_width - 20) * morale_value, bar_height))
     
     def draw_history_fact(self):
-        screen.blit(self.images[self.current_history_fact['image']], (0, 0))
+        screen.blit(self.history_facts_background, (0, 0))
         
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
@@ -860,7 +829,7 @@ class Game:
         Text(
             origin=(50, 150),
             width=WIDTH - 100,
-            text=self.current_history_fact['text'],
+            text=self.current_history_fact,
             font=font_historical,
             color=WHITE,
             should_center=False
