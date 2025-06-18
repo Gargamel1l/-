@@ -42,8 +42,13 @@ DAY_START = 6
 BLOCKADE_START = datetime(1941, 9, 8)
 BLOCKADE_END = datetime(1944, 1, 27)
 
+# Ограничение частоты кадров
+MAX_FPS = 30
+
 class Game:
     def __init__(self):
+        self.is_running = True  # Должна ли игра продолжать работать
+        self.fps_clock = pygame.time.Clock()  # Часы для ограничения частоты кадров
         self.state = MENU
         self.day = 1
         self.max_days = 5
@@ -61,7 +66,7 @@ class Game:
         self.load_assets()
         self.load_story()
         self.load_history_facts()
-        
+
     def load_assets(self):
         # Создаем случайные изображения с тематическими цветами
         self.images = {
@@ -236,6 +241,43 @@ class Game:
                 'sound': None
             }
         ]
+
+    def run(self):
+        while self.is_running:
+            self.handle_player_input()
+            self.draw()
+    
+    def handle_player_input(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.is_running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.is_running = False
+                elif event.key == pygame.K_r and self.state in (GAME_OVER, VICTORY):
+                    self.reset_game()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    self.handle_click(event.pos)
+
+    def draw(self):
+        if self.state == MENU:
+            self.draw_menu()
+        elif self.state == DAY_START:
+            self.draw_day_start()
+        elif self.state == GAME:
+            self.draw_game()
+        elif self.state == GAME_OVER:
+            self.draw_game_over()
+        elif self.state == VICTORY:
+            self.draw_victory()
+        elif self.state == HISTORY_FACT:
+            self.draw_history_fact()
+        elif self.state == SHOW_RESULT:
+            self.draw_result()
+        
+        pygame.display.flip()
+        self.fps_clock.tick(MAX_FPS)
     
     def start_game(self):
         self.day = 1
@@ -330,22 +372,6 @@ class Game:
     def game_over(self, reason):
         self.state = GAME_OVER
         self.game_over_reason = reason
-    
-    def draw(self):
-        if self.state == MENU:
-            self.draw_menu()
-        elif self.state == DAY_START:
-            self.draw_day_start()
-        elif self.state == GAME:
-            self.draw_game()
-        elif self.state == GAME_OVER:
-            self.draw_game_over()
-        elif self.state == VICTORY:
-            self.draw_victory()
-        elif self.state == HISTORY_FACT:
-            self.draw_history_fact()
-        elif self.state == SHOW_RESULT:
-            self.draw_result()
     
     def draw_menu(self):
         screen.blit(self.images['menu_bg'], (0, 0))
@@ -559,29 +585,8 @@ class Game:
         self.__init__()
 
 def main():
-    clock = pygame.time.Clock()
     game = Game()
-    
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key == pygame.K_r and game.state in (GAME_OVER, VICTORY):
-                    game.reset_game()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    game.handle_click(event.pos)
-        
-        game.draw()
-        pygame.display.flip()
-        clock.tick(30)
-    
-    pygame.quit()
-    sys.exit()
+    game.run()
 
 if __name__ == "__main__":
     main()
