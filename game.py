@@ -85,22 +85,30 @@ class Text:
             current_y += text_surface.get_height()
     
     def wrap_text(self):
-        if self.width <= 0:
-            return [self.text]
+        newlines = self.text.split('\n')
 
-        words = self.text.split(' ')
         lines = []
         current_line = []
         
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            test_width = self.font.size(test_line)[0]
+        for newline in newlines:
+            if self.width <= 0:
+                lines.append(newline)
+                continue
             
-            if test_width < self.width:
-                current_line.append(word)
-            else:
+            for word in newline.split(' '):
+                test_line = ' '.join(current_line + [word])
+                test_width = self.font.size(test_line)[0]
+                
+                if test_width < self.width:
+                    current_line.append(word)
+                else:
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+            
+            if current_line:
                 lines.append(' '.join(current_line))
-                current_line = [word]
+                current_line = []
+        
         
         if current_line:
             lines.append(' '.join(current_line))
@@ -717,13 +725,8 @@ class Game:
         ).draw()
         Text(
             origin=(WIDTH//2, HEIGHT//2),
-            text=self.game_over_reason,
-            font=font_medium,
-            color=WHITE
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT//2 + 100),
-            text="Нажмите R для перезапуска",
+            text=self.game_over_reason + '\n' +
+                 "Нажмите R для перезапуска",
             font=font_medium,
             color=WHITE
         ).draw()
@@ -739,19 +742,9 @@ class Game:
         ).draw()
         Text(
             origin=(WIDTH//2, HEIGHT//2),
-            text=f"Вы продержались {self.max_days} дней!",
-            font=font_medium,
-            color=WHITE
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT//2 + 50),
-            text="Ваши усилия помогли спасти жизни ленинградцев.",
-            font=font_medium,
-            color=WHITE
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT//2 + 100),
-            text="Нажмите R для перезапуска",
+            text=f"Вы продержались {self.max_days} дней!\n" +
+                 "Ваши усилия помогли спасти жизни ленинградцев.\n" +
+                 "Нажмите R для перезапуска",
             font=font_medium,
             color=WHITE
         ).draw()
