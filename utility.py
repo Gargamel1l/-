@@ -39,21 +39,31 @@ class PlayerStats:
     """Текущее количество здоровья."""
     morale: int
     """Текущее количество боевого духа."""
+    total_delivered: int = 0
+    """Общее доставленное продовольствие"""
+    evacuated: int = 0
+    """Количество эвакуированных людей"""
 
 @dataclasses.dataclass
 class PlayerStatsModifier:
     """Этот класс описывает изменение параметров игрока из-за внешних факторов."""
-    food: int
+    food: int = 0
     """Изменение в количестве еды."""
-    health: int
+    health: int = 0
     """Изменение в количестве здоровья."""
-    morale: int
+    morale: int = 0
     """Изменение в количестве боевого духа."""
+    delivered: int = 0
+    """Доставленное продовольствие"""
+    evacuated: int = 0
+    """Эвакуированные люди"""
 
     def apply(self, stats: PlayerStats):
         stats.food = max(min(self.food + stats.food, MAX_FOOD), 0)
         stats.health = max(min(self.health + stats.health, MAX_HEALTH), 0)
         stats.morale = max(min(self.morale + stats.morale, MAX_MORALE), 0)
+        stats.total_delivered += self.delivered
+        stats.evacuated += self.evacuated
 
 @dataclasses.dataclass
 class SimpleConsequence:
@@ -84,7 +94,7 @@ class RiskBasedConsequence:
         """Применяет последствия выбора к параметрам игрока. 
         
         Возвращает текст, описывающий последствия выбора."""
-        if random.random() > self.risk:
+        if random.random() < self.risk:
             return self.success.apply_consequences(stats)
         else:
             return self.failure.apply_consequences(stats)
@@ -100,6 +110,8 @@ class Choice:
 @dataclasses.dataclass
 class Scene:
     """Этот класс описывает сцену (этап игры с выборами)."""
+    title: str
+    """Заголовок сцены"""
     text: str
     """Текскт описывающий сцену."""
     background: pygame.Surface
@@ -108,210 +120,416 @@ class Scene:
     """Звук играющий при начале сцены."""
     choices: list[Choice]
     """Список выборов доступных в сцене."""
+    date: datetime
+    """Дата события"""
 
 def get_scenes(width: int, height: int) -> list[Scene]:
     return [
         Scene(
-            text=f"День 1. {BLOCKADE_START.strftime('%d.%m.%Y')}\nВы загружаете грузовик на базе. Сколько продовольствия взять?",
-            background=create_image((80, 80, 100), width, height),  # grey
-            sound=None,
-            choices=[
-                Choice(
-                    text="Максимальный груз (250 кг, риск провалиться под лёд)",
-                    consequence=SimpleConsequence(
-                        text="Вы загрузили максимальный груз. Будьте осторожны!",
-                        modifier=PlayerStatsModifier(250, -20, -10)
-                    )
-                ),
-                Choice(
-                    text="Средний груз (150 кг, баланс риска и пользы)",
-                    consequence=SimpleConsequence(
-                        text="Вы загрузили средний груз. Разумный выбор.",
-                        modifier=PlayerStatsModifier(150, -10, -5)
-                    )
-                ),
-                Choice(
-                    text="Минимальный груз (50 кг, безопасно, но мало еды)",
-                    consequence=SimpleConsequence(
-                        "Вы взяли минимальный груз. Городу будет тяжело...",
-                        PlayerStatsModifier(50, 0, 0)
-                    )
-                )
-            ]
-        ),
-        Scene(
-            text="День 1. Вы движетесь по льду Ладожского озера. Впереди трещина во льду. Что делать?",
-            background=create_image((70, 90, 80), width, height),  # cold
-            sound=None,
-            choices=[
-                Choice(
-                    text="Проехать быстро (риск провалиться)",
-                    consequence=RiskBasedConsequence(
-                        risk=0.4, 
-                        success=SimpleConsequence(
-                            text="Вы успешно проехали трещину на скорости!",
-                            modifier=PlayerStatsModifier(0, 10, 10)
-                        ), 
-                        failure=SimpleConsequence(
-                            text="Грузовик провалился под лёд! Вы потеряли весь груз.",
-                            modifier=PlayerStatsModifier(-250, -30, 0)
+                title="Начало блокады",
+                text="Сентябрь 1941 года. Немецкие войска замкнули кольцо вокруг Ленинграда.\n"
+                     "Вы - водитель грузовика, которому поручено проложить путь через Ладожское озеро.\n"
+                     "Какой груз взять для первого рейса?",
+                background=create_image((80, 80, 100), width, height),
+                sound=None,
+                date=datetime(1941, 9, 12),
+                choices=[
+                    Choice(
+                        text="Максимальный груз (250 кг муки)",
+                        consequence=SimpleConsequence(
+                            text="Вы загрузили максимальный груз. Будьте осторожны на тонком льду!",
+                            modifier=PlayerStatsModifier(250, -15, -10)
+                        )
+                    ),
+                    Choice(
+                        text="Средний груз (150 кг, баланс)",
+                        consequence=SimpleConsequence(
+                            text="Вы загрузили средний груз. Разумный выбор для первого рейса.",
+                            modifier=PlayerStatsModifier(150, -5, 0)
+                        )
+                    ),
+                    Choice(
+                        text="Минимальный груз (50 кг, для разведки пути)",
+                        consequence=SimpleConsequence(
+                            "Вы взяли минимальный груз. Город ждет продовольствия...",
+                            PlayerStatsModifier(50, 5, -5)
                         )
                     )
-                ),
-                Choice(
-                    text="Проехать медленно (безопаснее)",
-                    consequence=RiskBasedConsequence(
-                        risk=0.2, 
-                        success=SimpleConsequence(
-                            text="Вы осторожно пересекли трещину.",
-                            modifier=PlayerStatsModifier(0, 0, 0)
-                        ),
-                        failure=SimpleConsequence(
-                            text="Лёд треснул, но вы успели проехать! Часть груза повреждена.",
-                            modifier=PlayerStatsModifier(30, -10, 0)
+                ]
+            ),
+            
+            # Первые рейсы по льду
+            Scene(
+                title="Ледовая трасса",
+                text="Ноябрь 1941 года. Лед на Ладожском озере окреп.\n"
+                     "Вы везете муку в осажденный город. Впереди трещина во льду.\n"
+                     "Как преодолеть опасный участок?",
+                background=create_image((70, 90, 80), width, height),
+                sound=None,
+                date=datetime(1941, 11, 20),
+                choices=[
+                    Choice(
+                        text="Проехать быстро (риск провалиться)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.4, 
+                            success=SimpleConsequence(
+                                text="Вы успешно проехали трещину на скорости!",
+                                modifier=PlayerStatsModifier(0, -5, 10)
+                            ), 
+                            failure=SimpleConsequence(
+                                text="Грузовик провалился под лёд! Вы потеряли весь груз.",
+                                modifier=PlayerStatsModifier(-250, -30, -20)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Проехать медленно (осторожно)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.2, 
+                            success=SimpleConsequence(
+                                text="Вы осторожно пересекли трещину.",
+                                modifier=PlayerStatsModifier(0, 0, 0)
+                            ),
+                            failure=SimpleConsequence(
+                                text="Лёд треснул, но вы успели проехать! Часть груза повреждена.",
+                                modifier=PlayerStatsModifier(-50, -15, -10)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Объехать (потеря времени)",
+                        consequence=SimpleConsequence(
+                            text="Вы выбрали безопасный путь, потеряв драгоценное время.",
+                            modifier=PlayerStatsModifier(0, 0, -10)
                         )
                     )
-                ),
-                Choice(
-                    text="Объехать (потеря времени, -10% боевого духа)",
-                    consequence=SimpleConsequence(
-                        text="Вы выбрали безопасный путь, потеряв время.",
-                        modifier=PlayerStatsModifier(0, 0, -10)
-                    )
-                )
-            ]
-        ),
-        Scene(
-            text=f"День 2. {(BLOCKADE_START + timedelta(days=1)).strftime('%d.%m.%Y')}\nВ небе появляются немецкие самолёты!",
-            background=create_image((90, 60, 70), width, height),  # red
-            sound=None,
-            choices=[
-                Choice(
-                    text="Ускориться и попытаться уехать",
-                    consequence=RiskBasedConsequence(
-                        risk=0.5,
-                        success=SimpleConsequence(
-                            text="Вам удалось уйти от бомбёжки!",
-                            modifier=PlayerStatsModifier(0, 0, 0)
-                        ), 
-                        failure=SimpleConsequence(
-                            text="Прямое попадание! Грузовик уничтожен.",
-                            modifier=PlayerStatsModifier(-250, -50, 0)
+                ]
+            ),
+            
+            # Бомбардировки трассы
+            Scene(
+                title="Воздушные налеты",
+                text="Декабрь 1941 года. Немецкая авиация постоянно бомбит трассу.\n"
+                     "В небе появились вражеские самолеты. Ваши действия?",
+                background=create_image((90, 60, 70), width, height),
+                sound=None,
+                date=datetime(1941, 12, 15),
+                choices=[
+                    Choice(
+                        text="Ускориться и попытаться уехать",
+                        consequence=RiskBasedConsequence(
+                            risk=0.5,
+                            success=SimpleConsequence(
+                                text="Вам удалось уйти от бомбёжки!",
+                                modifier=PlayerStatsModifier(0, -5, 5)
+                            ), 
+                            failure=SimpleConsequence(
+                                text="Прямое попадание! Грузовик уничтожен.",
+                                modifier=PlayerStatsModifier(-250, -40, -30)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Остановиться и замаскироваться",
+                        consequence=RiskBasedConsequence(
+                            risk=0.3,
+                            success=SimpleConsequence(
+                                text="Самолёты вас не заметили.",
+                                modifier=PlayerStatsModifier(0, 0, 0)
+                            ), 
+                            failure=SimpleConsequence(
+                                text="Бомбы упали рядом, грузовик повреждён.",
+                                modifier=PlayerStatsModifier(-50, -20, -15)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Продолжить движение как есть",
+                        consequence=RiskBasedConsequence(
+                            risk=0.7,
+                            success=SimpleConsequence(
+                                text="Самолёты пролетели мимо.",
+                                modifier=PlayerStatsModifier(0, 0, 0)
+                            ), 
+                            failure=SimpleConsequence(
+                                text="Бомба попала в грузовик!",
+                                modifier=PlayerStatsModifier(-100, -30, -20)
+                            )
+                        )
+                    ),
+                ]
+            ),
+            
+            # Голод в Ленинграде
+            Scene(
+                title="Хлеб блокадного города",
+                text="Январь 1942 года. Вы прибыли в Ленинград. На разгрузке к вам подошли истощенные дети.\n"
+                     "Они просят еды. Ваши действия?",
+                background=create_image((60, 60, 70), width, height),
+                sound=None,
+                date=datetime(1942, 1, 20),
+                choices=[
+                    Choice(
+                        text="Отдать свой паек (-20 кг еды)",
+                        consequence=SimpleConsequence(
+                            text="Дети благодарны вам. Вы чувствуете, что поступили правильно.",
+                            modifier=PlayerStatsModifier(-20, 0, 15)
+                        )
+                    ),
+                    Choice(
+                        text="Отказать (выполняя приказ)",
+                        consequence=SimpleConsequence(
+                            text="Вы не смогли смотреть в глаза детям...",
+                            modifier=PlayerStatsModifier(0, 0, -10)
+                        )
+                    ),
+                    Choice(
+                        text="Отдать часть груза (-50 кг, рискуя наказанием)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.6,
+                            success=SimpleConsequence(
+                                text="Командир одобрил ваш поступок.",
+                                modifier=PlayerStatsModifier(-50, 0, 20)
+                            ),
+                            failure=SimpleConsequence(
+                                text="Вас наказали за самовольное решение.",
+                                modifier=PlayerStatsModifier(0, -10, -15)
+                            )
                         )
                     )
-                ),
-                Choice(
-                    text="Остановиться и замаскироваться",
-                    consequence=RiskBasedConsequence(
-                        risk=0.3,
-                        success=SimpleConsequence(
-                            text="Самолёты вас не заметили.",
-                            modifier=PlayerStatsModifier(0, 0, 0)
-                        ), 
-                        failure=SimpleConsequence(
-                            text="Бомбы упали рядом, грузовик повреждён.",
-                            modifier=PlayerStatsModifier(-50, -20, 0)
+                ]
+            ),
+            
+            # Эвакуация жителей
+            Scene(
+                title="Обратный путь",
+                text="Февраль 1942 года. В обратный путь нужно взять эвакуированных.\n"
+                     "Сколько людей вы готовы взять?",
+                background=create_image((50, 60, 70), width, height),
+                sound=None,
+                date=datetime(1942, 2, 10),
+                choices=[
+                    Choice(
+                        text="Максимум (5 человек, риск перегруза)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.7,
+                            success=SimpleConsequence(
+                                text="Вы благополучно доставили людей!",
+                                modifier=PlayerStatsModifier(0, -10, 15, evacuated=5)
+                            ),
+                            failure=SimpleConsequence(
+                                text="Грузовик провалился под лёд!",
+                                modifier=PlayerStatsModifier(-100, -30, -20, evacuated=-5)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="3 человека (баланс)",
+                        consequence=SimpleConsequence(
+                            text="Вы доставили людей без происшествий.",
+                            modifier=PlayerStatsModifier(0, 0, 10, evacuated=3)
+                        )
+                    ),
+                    Choice(
+                        text="Никого не брать (строго по приказу)",
+                        consequence=SimpleConsequence(
+                            text="Вы уехали без пассажиров...",
+                            modifier=PlayerStatsModifier(0, 0, -15)
                         )
                     )
-                ),
-                Choice(
-                    text="Продолжить движение как есть",
-                    consequence=RiskBasedConsequence(
-                        risk=0.7,
-                        success=SimpleConsequence(
-                            text="Самолёты пролетели мимо.",
-                            modifier=PlayerStatsModifier(0, 0, 0)
-                        ), 
-                        failure=SimpleConsequence(
-                            text="Бомба попала в грузовик!",
-                            modifier=PlayerStatsModifier(-0.8 * 250, -40, 0)
+                ]
+            ),
+            
+            # Весенняя распутица
+            Scene(
+                title="Таяние льда",
+                text="Апрель 1942 года. Лед на озере становится тонким.\n"
+                     "Нужно доставить последний груз по зимней дороге. Ваше решение?",
+                background=create_image((70, 100, 120), width, height),
+                sound=None,
+                date=datetime(1942, 4, 5),
+                choices=[
+                    Choice(
+                        text="Рискнуть и поехать (последний шанс)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.3,
+                            success=SimpleConsequence(
+                                text="Вы успешно доставили груз по тающему льду!",
+                                modifier=PlayerStatsModifier(150, -15, 20, delivered=150)
+                            ),
+                            failure=SimpleConsequence(
+                                text="Грузовик провалился под лёд!",
+                                modifier=PlayerStatsModifier(-150, -30, -25)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Дождаться кораблей (потеря времени)",
+                        consequence=SimpleConsequence(
+                            text="Вы дождались навигации, но город терял людей каждый день...",
+                            modifier=PlayerStatsModifier(0, 0, -10)
+                        )
+                    ),
+                    Choice(
+                        text="Искать обходной путь (неизвестный маршрут)",
+                        consequence=RiskBasedConsequence(
+                            risk=0.5,
+                            success=SimpleConsequence(
+                                text="Вы нашли безопасный путь!",
+                                modifier=PlayerStatsModifier(100, -5, 10, delivered=100)
+                            ),
+                            failure=SimpleConsequence(
+                                text="Вы заблудились и потеряли часть груза.",
+                                modifier=PlayerStatsModifier(-50, -10, -15)
+                            )
                         )
                     )
-                ),
-            ]
-        ),
-        Scene(
-            text=f"День 3. {(BLOCKADE_START + timedelta(days=2)).strftime('%d.%m.%Y')}\nВы встретили колонну грузовиков. Командир предлагает объединиться.",
-            background=create_image((60, 80, 90), width, height),  # unknown?
-            sound=None,
-            choices=[
-                Choice(
-                    text="Присоединиться к колонне (+10% боевого духа)",
-                    consequence=SimpleConsequence(
-                        text="Вы присоединились к колонне. Движение безопаснее.",
-                        modifier=PlayerStatsModifier(0, 0, 10),
-                    )
-                ),
-                Choice(
-                    text="Продолжить самостоятельно (риск нападения)",
-                    consequence=RiskBasedConsequence(
-                        risk=0.3,
-                        success=SimpleConsequence(
-                            text="Вы благополучно доехали одни.",
-                            modifier=PlayerStatsModifier(0, 0, 0)
-                        ),
-                        failure=SimpleConsequence(
-                            text="На вас напали! Часть груза украдена.",
-                            modifier=PlayerStatsModifier(-0.4 * 250, -15, 0)
+                ]
+            ),
+            
+            # Летние перевозки
+            Scene(
+                title="Ладьяжская флотилия",
+                text="Июль 1942 года. Вы перевозите грузы на барже. Немецкие самолеты атакуют караван.\n"
+                     "Ваши действия?",
+                background=create_image((60, 80, 100), width, height),
+                sound=None,
+                date=datetime(1942, 7, 15),
+                choices=[
+                    Choice(
+                        text="Маневрировать под огнем",
+                        consequence=RiskBasedConsequence(
+                            risk=0.4,
+                            success=SimpleConsequence(
+                                text="Вы умело уклонились от бомб!",
+                                modifier=PlayerStatsModifier(0, -10, 15)
+                            ),
+                            failure=SimpleConsequence(
+                                text="Бомба попала в баржу!",
+                                modifier=PlayerStatsModifier(-100, -30, -20)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Отстреливаться из зенитки",
+                        consequence=RiskBasedConsequence(
+                            risk=0.3,
+                            success=SimpleConsequence(
+                                text="Вы сбили вражеский самолет!",
+                                modifier=PlayerStatsModifier(0, 0, 20)
+                            ),
+                            failure=SimpleConsequence(
+                                text="Зенитка повреждена, баржа тонет!",
+                                modifier=PlayerStatsModifier(-150, -20, -15)
+                            )
+                        )
+                    ),
+                    Choice(
+                        text="Выбросить груз за борт (для скорости)",
+                        consequence=SimpleConsequence(
+                            text="Вы спасли баржу, но потеряли груз...",
+                            modifier=PlayerStatsModifier(-100, 0, -20)
                         )
                     )
-                )
-            ]
-        ),
-        Scene(
-            text=f"День 4. {(BLOCKADE_START + timedelta(days=3)).strftime('%d.%m.%Y')}\nНачалась сильная метель! Видимость практически нулевая.",
-            background=create_image((60, 80, 90), width, height),  # blue, snow storm
-            sound=None,
-            choices=[
-                Choice(
-                    text="Остановиться и переждать (потеря времени, -10 кг продовольствия)",
-                    consequence=SimpleConsequence(
-                        text="Вы переждали метель, потеряв немного времени.",
-                        modifier=PlayerStatsModifier(-10, 0, 0)
-                    )
-                ),
-                Choice(
-                    text="Продолжить движение (высокий риск аварии)",
-                    consequence=RiskBasedConsequence(
-                        risk=0.6,
-                        success=SimpleConsequence(
-                            text="Вы благополучно преодолели метель.",
-                            modifier=PlayerStatsModifier(0, 0, 0)
-                        ),
-                        failure=SimpleConsequence(
-                            text="Вы съехали с трассы! Грузовик застрял.",
-                            modifier=PlayerStatsModifier(-0.5 * 250, -20, 0)
+                ]
+            ),
+            
+            # Вторая блокадная зима
+            Scene(
+                title="Снова на лед",
+                text="Декабрь 1942 года. Снова установился лед. Дорога жизни возобновила работу.\n"
+                     "Вы везете продовольствие и медикаменты. Встретили замерзающего солдата.",
+                background=create_image((40, 60, 80), width, height),
+                sound=None,
+                date=datetime(1942, 12, 20),
+                choices=[
+                    Choice(
+                        text="Взять с собой (-10 кг груза)",
+                        consequence=SimpleConsequence(
+                            text="Вы спасли солдата. Он благодарен вам.",
+                            modifier=PlayerStatsModifier(-10, 0, 15)
+                        )
+                    ),
+                    Choice(
+                        text="Дать еду и теплую одежду (-5 кг груза)",
+                        consequence=SimpleConsequence(
+                            text="Вы помогли солдату, но оставили его.",
+                            modifier=PlayerStatsModifier(-5, 0, 5)
+                        )
+                    ),
+                    Choice(
+                        text="Проехать мимо (выполняя приказ)",
+                        consequence=SimpleConsequence(
+                            text="Вы не остановились...",
+                            modifier=PlayerStatsModifier(0, 0, -15)
                         )
                     )
-                )
-            ]
-        ),
-        Scene(
-            text=f"День 5. {(BLOCKADE_START + timedelta(days=4)).strftime('%d.%m.%Y')}\nВы прибыли в Ленинград. Голодные жители смотрят на ваш грузовик.",
-            background=create_image((90, 70, 80), width, height),  # warm, city
-            sound=None,
-            choices=[
-                Choice(
-                    text="Раздать всё продовольствие (+30% боевого духа)",
-                    consequence=SimpleConsequence(
-                        text="Вы раздали весь груз. Люди благодарны вам!",
-                        modifier=PlayerStatsModifier(0, 0, 30)
+                ]
+            ),
+            
+            # Прорыв блокады
+            Scene(
+                title="Операция 'Искра'",
+                text="Январь 1943 года. Советские войска прорвали блокаду!\n"
+                     "Вы везете праздничный груз в Ленинград. Как поступить с грузом?",
+                background=create_image((90, 70, 80), width, height),
+                sound=None,
+                date=datetime(1943, 1, 18),
+                choices=[
+                    Choice(
+                        text="Раздать все жителям (+30% морали)",
+                        consequence=SimpleConsequence(
+                            text="Люди ликуют! Блокада прорвана!",
+                            modifier=PlayerStatsModifier(0, 0, 30, delivered=150)
+                        )
+                    ),
+                    Choice(
+                        text="Передать на склады (по инструкции)",
+                        consequence=SimpleConsequence(
+                            text="Вы выполнили приказ. Груз пойдет на организованное распределение.",
+                            modifier=PlayerStatsModifier(0, 0, 10, delivered=150)
+                        )
+                    ),
+                    Choice(
+                        text="Часть раздать, часть сдать (-100 кг груза)",
+                        consequence=SimpleConsequence(
+                            text="Вы нашли компромисс между приказом и состраданием.",
+                            modifier=PlayerStatsModifier(-100, 0, 20, delivered=50)
+                        )
                     )
-                ),
-                Choice(
-                    text="Раздать половину (остальное на следующий рейс, +15% боевого духа)",
-                    consequence=SimpleConsequence(
-                        text="Вы раздали половину груза, сохранив часть на будущее.",
-                        modifier=PlayerStatsModifier(50, 0, 15)
+                ]
+            ),
+            
+            # Полное освобождение
+            Scene(
+                title="Снятие блокады",
+                text="Январь 1944 года. Блокада Ленинграда полностью снята!\n"
+                     "Ваш последний рейс. Как завершить свою миссию?",
+                background=create_image((100, 100, 120), width, height),
+                sound=None,
+                date=datetime(1944, 1, 27),
+                choices=[
+                    Choice(
+                        text="Везти максимальный груз (честь водителя)",
+                        consequence=SimpleConsequence(
+                            text="Вы доставили рекордный груз в освобожденный город!",
+                            modifier=PlayerStatsModifier(250, -10, 25, delivered=250)
+                        )
+                    ),
+                    Choice(
+                        text="Взять ветеранов блокады (5 человек)",
+                        consequence=SimpleConsequence(
+                            text="Вы доставили героев блокады на торжества.",
+                            modifier=PlayerStatsModifier(-50, 0, 30, evacuated=5)
+                        )
+                    ),
+                    Choice(
+                        text="Совершить памятный рейс (с символическим грузом)",
+                        consequence=SimpleConsequence(
+                            text="Ваш рейс стал символом победы над блокадой.",
+                            modifier=PlayerStatsModifier(50, 10, 35, delivered=50)
+                        )
                     )
-                ),
-                Choice(
-                    text="Сохранить большую часть (для следующего рейса, +5% боевого духа)",
-                    consequence=SimpleConsequence(
-                        text="Вы сохранили большую часть груза для следующего рейса.",
-                        modifier=PlayerStatsModifier(-20, 0, 5)
-                    )
-                )
-            ]
-        )
+                ]
+            )
     ]

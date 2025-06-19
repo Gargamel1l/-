@@ -21,6 +21,7 @@ BLUE = pygame.Color(50, 50, 150)
 RED = pygame.Color(150, 50, 50)
 DARK_RED = pygame.Color(100, 0, 0)
 GOLD = pygame.Color(218, 165, 32)
+GREEN = pygame.Color(50, 150, 50)
 
 # Шрифты (адаптивные размеры)
 font_large = pygame.font.SysFont('arial', HEIGHT // 20)
@@ -28,14 +29,12 @@ font_medium = pygame.font.SysFont('arial', HEIGHT // 25)
 font_small = pygame.font.SysFont('arial', HEIGHT // 30)
 font_historical = pygame.font.SysFont('timesnewroman', HEIGHT // 25)
 
-# Состояния игры
-MENU = 0
-GAME = 1
-GAME_OVER = 2
-VICTORY = 3
-HISTORY_FACT = 4
-SHOW_RESULT = 5
-DAY_START = 6
+STATE_MENU = 0
+STATE_CHOICE = 1
+STATE_RESULT = 2
+STATE_HISTORY = 3
+STATE_GAME_OVER = 4
+STATE_VICTORY = 5
 
 # Ограничение частоты кадров
 MAX_FPS = 30
@@ -128,33 +127,149 @@ class Game:
     def __init__(self):
         self.is_running = True  # Должна ли игра продолжать работать
         self.fps_clock = pygame.time.Clock()  # Часы для ограничения частоты кадров
-        self.buttons: list[Button] = []
-        self.state = MENU
-        self.day = 1
-        self.max_days = 5
-        self.stats: PlayerStats
-        self.story_progress = 0
+
+        self.init_state_menu()
+        self.init_state_result()
+        self.init_state_choice()
+        self.init_state_history()
+        self.init_state_victory()
+        self.init_state_game_over()
+
+        self.state = STATE_MENU
+        self.scene_index = 0
         self.current_scene = None
-        self.choices = []
-        self.date = BLOCKADE_START
-        self.history_facts_shown = []
-        self.waiting_for_choice = False
-        self.result_text = ""
-        self.menu_background = create_image((50, 70, 90), WIDTH, HEIGHT)  # Темно-синий
-        self.day_start_background = create_image((80, 80, 100), WIDTH, HEIGHT)
+        self.stats: PlayerStats
+        
         self.load_story()
-        self.load_history_facts()
     
-    def load_story(self):
-        self.story_scenes = get_scenes(WIDTH, HEIGHT)
+    def init_state_menu(self):
+        self.menu_background = create_image((50, 70, 90), WIDTH, HEIGHT)  # Темно-синий
+        self.menu_title = Text(
+            origin=(WIDTH//2, HEIGHT//4),
+            font=font_large,
+            text="ДОРОГА ЖИЗНИ",
+            color=GOLD
+        )
+        self.menu_subtile = Text(
+            origin=(WIDTH//2, HEIGHT//4 + 50),
+            font=font_medium,
+            text="Блокада Ленинграда 1941-1944",
+            color=WHITE
+        )
+        self.menu_button_begin = Button(
+            rect=pygame.Rect(WIDTH//2 - 150, HEIGHT//2, 300, 50),
+            fill_color=DARK_RED,
+            outline_width=2,
+            outline_color=BLACK
+        )
+        self.menu_button_begin_text = Text(
+            origin=(WIDTH//2, HEIGHT//2),
+            width=300,
+            font=font_medium,
+            text="НАЧАТЬ ИГРУ",
+            color=WHITE
+        )
     
-    def load_history_facts(self):
+    def init_state_result(self):
+        self.result_text = Text(
+            origin=(50, 30),
+            width=WIDTH - 100,
+            font=font_small,
+            text="",
+            color=WHITE,
+            should_center=False
+        )
+        
+        self.result_button_next = Button(
+            rect=pygame.Rect(WIDTH//2 - 200, HEIGHT - 200, 400, 50),
+            fill_color=BLUE,
+            outline_width=2,
+            outline_color=BLACK
+        )
+        self.result_button_next_text = Text(
+            origin=(WIDTH//2, HEIGHT - 200),
+            font=font_medium,
+            text="ПРОДОЛЖИТЬ",
+            color=WHITE
+        )
+    
+    def init_state_choice(self):
+        self.buttons: list[tuple[Button, Text]] = []
+        self.choices = []
+    
+    def init_state_history(self):
         self.history_facts_background = create_image((70, 70, 90), WIDTH, HEIGHT)
+
         self.history_facts = [
             "Блокада Ленинграда длилась с 8 сентября 1941 года по 27 января 1944 года (872 дня). Это самая продолжительная и разрушительная блокада в истории человечества.",
             "Дорога жизни - ледовая трасса через Ладожское озеро. Зимой 1941-1942 по ней доставляли 2000 тонн грузов ежедневно. Каждый рейс был смертельно опасен.",
             "Норма хлеба для рабочих в ноябре 1941 года составляла 250 грамм в день, для остальных - 125 грамм. Люди умирали от голода прямо на улицах."
         ]
+        self.history_facts_shown = []
+
+        self.history_title = Text(
+            origin=(WIDTH//2, 50),
+            text="ИСТОРИЧЕСКАЯ СПРАВКА",
+            font=font_large,
+            color=GOLD
+        )
+
+        self.history_fact_text = Text(
+            origin=(50, 150),
+            width=WIDTH - 100,
+            text="",
+            font=font_historical,
+            color=WHITE,
+            should_center=False
+        )
+
+        self.history_fact_button_next = Button(
+            rect=pygame.Rect(WIDTH//2 - 100, HEIGHT - 100, 200, 50),
+            fill_color=BLUE,
+            outline_width=2,
+            outline_color=BLACK
+        )
+        self.history_fact_button_next_text = Text(
+            origin=(WIDTH//2, HEIGHT - 100),
+            text="ПРОДОЛЖИТЬ",
+            font=font_medium,
+            color=WHITE,
+            should_center=True
+        )
+
+    def init_state_victory(self):
+        self.victory_title = Text(
+            origin=(WIDTH//2, HEIGHT//3),
+            text="ПОБЕДА!",
+            font=font_large,
+            color=GOLD
+        )
+        self.vicoty_text = Text(
+            origin=(WIDTH//2, HEIGHT//2),
+            text=f"Вы продержались до конца!\n" +
+                 "Ваши усилия помогли спасти жизни ленинградцев.\n" +
+                 "Нажмите R для перезапуска",
+            font=font_medium,
+            color=WHITE
+        )
+    
+    def init_state_game_over(self):
+        self.game_over_reason = ""
+
+        self.game_over_title = Text(
+            origin=(WIDTH//2, HEIGHT//3),
+            text="ИГРА ОКОНЧЕНА",
+            font=font_large,
+            color=RED
+        )
+        self.game_over_subtile = Text(
+            origin=(WIDTH//2, HEIGHT//2),
+            font=font_medium,
+            color=WHITE
+        )
+    
+    def load_story(self):
+        self.story_scenes = get_scenes(WIDTH, HEIGHT)
 
     def run(self):
         while self.is_running:
@@ -168,124 +283,129 @@ class Game:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.is_running = False
-                elif event.key == pygame.K_r and self.state in (GAME_OVER, VICTORY):
+                elif event.key == pygame.K_r and self.state == STATE_GAME_OVER:
                     self.reset_game()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     self.handle_click(event.pos)
 
     def draw(self):
-        if self.state == MENU:
+        if self.state == STATE_MENU:
             self.draw_menu()
-        elif self.state == DAY_START:
-            self.draw_day_start()
-        elif self.state == GAME:
+        elif self.state == STATE_CHOICE:
             self.draw_game()
-        elif self.state == GAME_OVER:
-            self.draw_game_over()
-        elif self.state == VICTORY:
-            self.draw_victory()
-        elif self.state == HISTORY_FACT:
-            self.draw_history_fact()
-        elif self.state == SHOW_RESULT:
+        elif self.state == STATE_RESULT:
             self.draw_result()
+        elif self.state == STATE_HISTORY:
+            self.draw_history_fact()
+        elif self.state == STATE_GAME_OVER:
+            self.draw_game_over()
+        elif self.state == STATE_VICTORY:
+            self.draw_victory()
         
         pygame.display.flip()
         self.fps_clock.tick(MAX_FPS)
     
     def handle_click(self, pos):
-        if self.state == MENU:
-            if WIDTH//2 - 150 <= pos[0] <= WIDTH//2 + 150 and HEIGHT//2 <= pos[1] <= HEIGHT//2 + 50:
+        if self.state == STATE_MENU:
+            if self.menu_button_begin.contains_point(pos):
                 self.start_game()
         
-        elif self.state == DAY_START:
-            if WIDTH//2 - 150 <= pos[0] <= WIDTH//2 + 150 and HEIGHT//2 + 100 <= pos[1] <= HEIGHT//2 + 150:
-                self.start_day()
-        
-        elif self.state == GAME and self.waiting_for_choice and self.choices:
-            for i in range(len(self.choices)):
-                btn_rect = pygame.Rect(WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80)
-                if btn_rect.collidepoint(pos):
+        elif self.state == STATE_CHOICE:
+            for i in range(len(self.buttons)):
+                (button, _) = self.buttons[i]
+                if button.contains_point(pos):
                     self.process_choice(i)
                     break
         
-        elif self.state == HISTORY_FACT:
-            if WIDTH//2 - 100 <= pos[0] <= WIDTH//2 + 100 and HEIGHT - 100 <= pos[1] <= HEIGHT - 50:
-                self.state = DAY_START
-        
-        elif self.state == SHOW_RESULT:
-            if WIDTH//2 - 150 <= pos[0] <= WIDTH//2 + 150 and HEIGHT - 200 <= pos[1] <= HEIGHT - 150:
+        elif self.state == STATE_HISTORY:
+            if self.history_fact_button_next.contains_point(pos):
                 self.next_scene()
-                self.check_game_state()
+        
+        elif self.state == STATE_RESULT:
+            if self.result_button_next.contains_point(pos):
+                if self.check_game_failed():
+                    self.begin_state_game_over()
+                else:
+                    self.begin_state_history()
     
     def start_game(self):
-        self.day = 1
         self.stats = PlayerStats(0, 100, 100)
-        self.date = BLOCKADE_START
-        self.state = DAY_START
-        self.story_progress = 0
-        self.history_facts_shown = []  # Сброс показанных фактов
+        self.scene_index = 0
+        self.history_facts_shown = []
+        self.begin_state_choices()
     
-    def start_day(self):
-        self.state = GAME
-        self.story_progress = (self.day - 1) * 2  # 2 сцены на день
-        if self.story_progress >= len(self.story_scenes):
-            self.story_progress = len(self.story_scenes) - 1
-        self.current_scene = self.story_scenes[self.story_progress]
+    def begin_result_with_text(self, text: str):
+        self.result_text.text = text
+        self.state = STATE_RESULT
+    
+    def begin_state_choices(self):
+        self.state = STATE_CHOICE
+        self.current_scene = self.story_scenes[self.scene_index]
         self.choices = self.current_scene.choices
-        self.waiting_for_choice = True
+        self.buttons = []
+        
+        for i, choice in enumerate(self.choices):
+            button = Button(
+                rect=pygame.Rect(WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80),
+                fill_color=DARK_RED if i % 2 == 0 else BLUE,
+                outline_width=2,
+                outline_color=BLACK
+            )
+            text = Text(
+                origin=(WIDTH//2, HEIGHT//2 + i * 90),
+                width=WIDTH//2,
+                font=font_small,
+                text=choice.text,
+                color=WHITE
+            )
+            self.buttons.append((button, text))
+    
+    def begin_victory(self):
+        self.state = STATE_VICTORY
+    
+    def begin_state_game_over(self):
+        self.game_over_subtile.text = self.game_over_reason + '\n' + "Нажмите R для перезапуска"
+        self.state = STATE_GAME_OVER
+    
+    # def show_history_fact(self):
+    def begin_state_history(self):
+        available_facts = [f for f in self.history_facts if f not in self.history_facts_shown]
+        if not available_facts:
+            available_facts = [f for f in self.history_facts]
+            self.history_facts_shown = []
+        
+        current_history_fact = random.choice(available_facts)
+        self.history_facts_shown.append(current_history_fact)
+        self.history_fact_text.text = current_history_fact
+        self.state = STATE_HISTORY
     
     def process_choice(self, choice_index):
-        if not self.waiting_for_choice or choice_index >= len(self.choices):
-            return
-        
-        self.waiting_for_choice = False
-        self.result_text = self.choices[choice_index].consequence.apply_consequences(self.stats)
-        
-        self.state = SHOW_RESULT
+        text = self.choices[choice_index].consequence.apply_consequences(self.stats)
+        self.begin_result_with_text(text)
     
     def next_scene(self):
-        self.story_progress += 1
+        self.scene_index += 1
         
-        # Если сцены закончились, завершаем день
-        if self.story_progress >= len(self.story_scenes) or not self.story_scenes[self.story_progress].text.startswith(f"День {self.day}"):
-            self.end_day()
+        if self.scene_index >= len(self.story_scenes):
+            self.begin_victory()
         else:
-            self.current_scene = self.story_scenes[self.story_progress]
-            self.choices = self.current_scene.choices
-            self.waiting_for_choice = True
-            self.state = GAME
+            self.begin_state_choices()
     
-    def end_day(self):
-        self.day += 1
-        self.date += timedelta(days=1)
-        
-        if self.day > self.max_days:
-            self.state = VICTORY
-        else:
-            self.show_history_fact()
-    
-    def show_history_fact(self):
-        available_facts = [f for f in self.history_facts if f not in self.history_facts_shown]
-        if available_facts:
-            self.current_history_fact = random.choice(available_facts)
-            self.history_facts_shown.append(self.current_history_fact)
-            self.state = HISTORY_FACT
-        else:
-            self.history_facts_shown = []
-            self.show_history_fact()
-    
-    def check_game_state(self):
-        if self.stats.health <= 0:
-            self.game_over("Ваше здоровье ухудшилось слишком сильно...")
+    def check_game_failed(self) -> bool:
+        if self.stats.food <= 0:
+            self.game_over_reason = "Весь груз еды был утерян..."
+            return True
+        elif self.stats.health <= 0:
+            self.game_over_reason = "Ваше здоровье ухудшилось слишком сильно..."
+            return True
         elif self.stats.morale <= 0:
-            self.game_over("Вы потеряли волю к продолжению...")
+            self.game_over_reason = "Вы потеряли волю к продолжению..."
+            return True
         # elif self.ice_stability <= 0:
-        #     self.game_over("Лёд стал слишком опасным для движения...")
-    
-    def game_over(self, reason):
-        self.state = GAME_OVER
-        self.game_over_reason = reason
+        #     self.begin_state_game_over("Лёд стал слишком опасным для движения...")
+        
+        return False
     
     def draw_menu(self):
         screen.blit(self.menu_background, (0, 0))
@@ -294,68 +414,13 @@ class Game:
         overlay.fill((0, 0, 0, 150))
         screen.blit(overlay, (0, 0))
         
-        Text(
-            origin=(WIDTH//2, HEIGHT//4),
-            font=font_large,
-            text="ДОРОГА ЖИЗНИ",
-            color=GOLD
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT//4 + 50),
-            font=font_medium,
-            text="Блокада Ленинграда 1941-1944",
-            color=WHITE
-        ).draw()
-
-        Button(
-            rect=pygame.Rect(WIDTH//2 - 150, HEIGHT//2, 300, 50),
-            fill_color=DARK_RED,
-            outline_width=2,
-            outline_color=BLACK
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT//2),
-            width=300,
-            font=font_medium,
-            text="НАЧАТЬ ИГРУ",
-            color=WHITE
-        ).draw()
-    
-    def draw_day_start(self):
-        screen.blit(self.day_start_background, (0, 0))
-        
-        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
-        screen.blit(overlay, (0, 0))
-
-        Text(
-            origin=(WIDTH//2, HEIGHT//3),
-            font=font_large,
-            text=f"ДЕНЬ {self.day}",
-            color=GOLD
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT//2),
-            font=font_medium,
-            text=self.date.strftime("%d.%m.%Y"),
-            color=WHITE
-        ).draw()
-        Button(
-            rect=pygame.Rect(WIDTH//2 - 150, HEIGHT//2 + 100, 300, 50),
-            fill_color=BLUE,
-            outline_width=2,
-            outline_color=BLACK
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT//2 + 100),
-            width=300,
-            font=font_medium,
-            text="НАЧАТЬ ДЕНЬ",
-            color=WHITE
-        ).draw()
+        self.menu_title.draw()
+        self.menu_subtile.draw()
+        self.menu_button_begin.draw()
+        self.menu_button_begin_text.draw()
     
     def draw_game(self):
-        if self.current_scene and self.current_scene.background:
+        if self.current_scene.background:
             screen.blit(self.current_scene.background, (0, 0))
         else:
             screen.fill(GRAY)
@@ -376,21 +441,9 @@ class Game:
         
         self.draw_status_bar()
         
-        if self.waiting_for_choice and self.choices:
-            for i, choice in enumerate(self.choices):
-                Button(
-                    rect=pygame.Rect(WIDTH//4, HEIGHT//2 + i * 90, WIDTH//2, 80),
-                    fill_color=DARK_RED if i % 2 == 0 else BLUE,
-                    outline_width=2,
-                    outline_color=BLACK
-                ).draw()
-                Text(
-                    origin=(WIDTH//2, HEIGHT//2 + i * 90),
-                    width=WIDTH//2,
-                    font=font_small,
-                    text=choice.text,
-                    color=WHITE
-                ).draw()
+        for button, text in self.buttons:
+            button.draw()
+            text.draw()
     
     def draw_result(self):
         if self.current_scene and self.current_scene.background:
@@ -401,30 +454,11 @@ class Game:
         text_bg = pygame.Surface((WIDTH - 40, HEIGHT//3), pygame.SRCALPHA)
         text_bg.fill((0, 0, 0, 180))
         screen.blit(text_bg, (20, 20))
-        
-        Text(
-            origin=(50, 30),
-            width=WIDTH - 100,
-            font=font_small,
-            text=self.result_text,
-            color=WHITE,
-            should_center=False
-        ).draw()
-        
+
         self.draw_status_bar()
-        
-        Button(
-            rect=pygame.Rect(WIDTH//2 - 150, HEIGHT - 200, 300, 50),
-            fill_color=BLUE,
-            outline_width=2,
-            outline_color=BLACK
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT - 200),
-            font=font_medium,
-            text="ПРОДОЛЖИТЬ",
-            color=WHITE
-        ).draw()
+        self.result_text.draw()
+        self.result_button_next.draw()
+        self.result_button_next_text.draw()
     
     def draw_status_bar(self):
         pygame.draw.rect(screen, BLACK, (0, HEIGHT - 80, WIDTH, 80))
@@ -436,27 +470,12 @@ class Game:
         
         Text(
             origin=(20, HEIGHT - 70),
-            text=self.date.strftime('%d.%m.%Y'),
-            font=font_small,
-            color=WHITE,
-            should_center=False
-        ).draw()
-        Text(
-            origin=(20, HEIGHT - 40),
-            text=f"День: {self.day}/{self.max_days}",
+            text=f"Этап: {self.scene_index+1}/{len(self.story_scenes)}",
             font=font_small,
             color=WHITE,
             should_center=False
         ).draw()
 
-        Text(
-            origin=(20, HEIGHT - 40),
-            text=f"День: {self.day}/{self.max_days}",
-            font=font_small,
-            color=WHITE,
-            should_center=False
-        ).draw()
-        
         food_x = bar_width
         Text(
             origin=(food_x, HEIGHT - 70),
@@ -478,7 +497,15 @@ class Game:
             should_center=False
         ).draw()
         pygame.draw.rect(screen, GRAY, (health_x, bar_y, bar_width - 20, bar_height))
-        health_color = (0, 255, 0) if self.stats.health > 50 else (255, 165, 0) if self.stats.health > 25 else (255, 0, 0)
+        
+        # Цвет здоровья зависит от уровня
+        if self.stats.health > 50:
+            health_color = GREEN
+        elif self.stats.health > 25:
+            health_color = (255, 165, 0)  # оранжевый
+        else:
+            health_color = RED
+            
         health_value = self.stats.health / 100
         pygame.draw.rect(screen, health_color, (health_x, bar_y, (bar_width - 20) * health_value, bar_height))
         
@@ -491,8 +518,36 @@ class Game:
             should_center=False
         ).draw()
         pygame.draw.rect(screen, GRAY, (morale_x, bar_y, bar_width - 20, bar_height))
+        
+        # Цвет морали зависит от уровня
+        if self.stats.morale > 60:
+            morale_color = BLUE
+        elif self.stats.morale > 30:
+            morale_color = (100, 100, 255)  # светлосиний
+        else:
+            morale_color = (150, 150, 255)  # бледно-синий
+            
         morale_value = self.stats.morale / 100
-        pygame.draw.rect(screen, BLUE, (morale_x, bar_y, (bar_width - 20) * morale_value, bar_height))
+        pygame.draw.rect(screen, morale_color, (morale_x, bar_y, (bar_width - 20) * morale_value, bar_height))
+        
+        # Дополнительная информация
+        delivered_x = bar_width * 4
+        Text(
+            origin=(delivered_x, HEIGHT - 70),
+            text=f"Доставлено: {self.stats.total_delivered} кг",
+            font=font_small,
+            color=WHITE,
+            should_center=False
+        ).draw()
+        
+        evacuated_x = bar_width * 5
+        Text(
+            origin=(evacuated_x, HEIGHT - 70),
+            text=f"Эвакуировано: {self.stats.evacuated} чел.",
+            font=font_small,
+            color=WHITE,
+            should_center=False
+        ).draw()
     
     def draw_history_fact(self):
         screen.blit(self.history_facts_background, (0, 0))
@@ -501,70 +556,22 @@ class Game:
         overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
         
-        Text(
-            origin=(WIDTH//2, 50),
-            text="ИСТОРИЧЕСКАЯ СПРАВКА",
-            font=font_large,
-            color=GOLD
-        ).draw()
-
-        Text(
-            origin=(50, 150),
-            width=WIDTH - 100,
-            text=self.current_history_fact,
-            font=font_historical,
-            color=WHITE,
-            should_center=False
-        ).draw()
-
-        Button(
-            rect=pygame.Rect(WIDTH//2 - 100, HEIGHT - 100, 200, 50),
-            fill_color=BLUE,
-            outline_width=2,
-            outline_color=BLACK
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT - 100),
-            text="ПРОДОЛЖИТЬ",
-            font=font_medium,
-            color=WHITE,
-            should_center=True
-        ).draw()
+        self.history_title.draw()
+        self.history_fact_text.draw()
+        self.history_fact_button_next.draw()
+        self.history_fact_button_next_text.draw()
     
     def draw_game_over(self):
         screen.fill(BLACK)
         
-        Text(
-            origin=(WIDTH//2, HEIGHT//3),
-            text="ИГРА ОКОНЧЕНА",
-            font=font_large,
-            color=RED
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT//2),
-            text=self.game_over_reason + '\n' +
-                 "Нажмите R для перезапуска",
-            font=font_medium,
-            color=WHITE
-        ).draw()
+        self.game_over_title.draw()
+        self.game_over_subtile.draw()
     
     def draw_victory(self):
         screen.fill(BLUE)
         
-        Text(
-            origin=(WIDTH//2, HEIGHT//3),
-            text="ПОБЕДА!",
-            font=font_large,
-            color=RED
-        ).draw()
-        Text(
-            origin=(WIDTH//2, HEIGHT//2),
-            text=f"Вы продержались {self.max_days} дней!\n" +
-                 "Ваши усилия помогли спасти жизни ленинградцев.\n" +
-                 "Нажмите R для перезапуска",
-            font=font_medium,
-            color=WHITE
-        ).draw()
+        self.victory_title.draw()
+        self.vicoty_text.draw()
     
     def reset_game(self):
         self.__init__()
