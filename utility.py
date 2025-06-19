@@ -153,7 +153,7 @@ def get_scenes(width: int, height: int) -> list[Scene]:
                 text="Сентябрь 1941 года. Немецкие войска замкнули кольцо вокруг Ленинграда.\n"
                      "Вы - водитель грузовика, которому поручено проложить путь через Ладожское озеро.\n"
                      "Какой груз взять для первого рейса?",
-                background=create_image((80, 80, 100), width, height),
+                background=load_image("pic1.png", scale=(width, height)),
                 sound=None,
                 date=datetime(1941, 9, 12),
                 choices=[
@@ -234,7 +234,7 @@ def get_scenes(width: int, height: int) -> list[Scene]:
                 title="Воздушные налеты",
                 text="Декабрь 1941 года. Немецкая авиация постоянно бомбит трассу.\n"
                      "В небе появились вражеские самолеты. Ваши действия?",
-                background=create_image((90, 60, 70), width, height),
+                background=load_image("pic2.png", scale=(width, height)),
                 sound=None,
                 date=datetime(1941, 12, 15),
                 choices=[
@@ -328,7 +328,7 @@ def get_scenes(width: int, height: int) -> list[Scene]:
                 title="Обратный путь",
                 text="Февраль 1942 года. В обратный путь нужно взять эвакуированных.\n"
                      "Сколько людей вы готовы взять?",
-                background=create_image((50, 60, 70), width, height),
+                background=load_image("pic3.png", scale=(width, height)),
                 sound=None,
                 date=datetime(1942, 2, 10),
                 choices=[
@@ -415,7 +415,7 @@ def get_scenes(width: int, height: int) -> list[Scene]:
                 title="Ладьяжская флотилия",
                 text="Июль 1942 года. Вы перевозите грузы на барже. Немецкие самолеты атакуют караван.\n"
                      "Ваши действия?",
-                background=create_image((60, 80, 100), width, height),
+                background=load_image("pic4.png", scale=(width, height)),
                 sound=None,
                 date=datetime(1942, 7, 15),
                 choices=[
