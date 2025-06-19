@@ -229,7 +229,7 @@ class Game:
         )
 
         self.history_fact_button_next = Button(
-            rect=pygame.Rect(WIDTH//2 - 100, HEIGHT - 100, 200, 50),
+            rect=pygame.Rect(WIDTH//2 - 200, HEIGHT - 100, 400, 50),
             fill_color=BLUE,
             outline_width=2,
             outline_color=BLACK
@@ -550,7 +550,7 @@ class Game:
         evacuated_x = bar_width * 5
         Text(
             origin=(evacuated_x, HEIGHT - 70),
-            text=f"Эвакуировано: {self.stats.evacuated} чел.",
+            text=f"Эвак-но: {self.stats.evacuated} ч.",
             font=font_small,
             color=WHITE,
             should_center=False
