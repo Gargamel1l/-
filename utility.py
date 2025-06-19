@@ -12,6 +12,29 @@ MAX_FOOD = 250
 MAX_HEALTH = 100
 MAX_MORALE = 100
 
+import os
+
+def load_image(file_path, convert_alpha=False, scale=None):
+    """
+    Загружает картинку.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Image file not found: {file_path}")
+    
+    try:
+        if convert_alpha:
+            surface = pygame.image.load(file_path).convert_alpha()
+        else:
+            surface = pygame.image.load(file_path).convert()
+            
+        if scale is not None:
+            surface = pygame.transform.scale(surface, scale)
+            
+        return surface
+        
+    except pygame.error as e:
+        raise pygame.error(f"Failed to load image {file_path}: {e}")
+
 def create_image(base_color: pygame.Color, width: int, height: int):
     """Создает изображение с текстурой"""
     surface = pygame.Surface((width, height))
@@ -319,7 +342,7 @@ def get_scenes(width: int, height: int) -> list[Scene]:
                             ),
                             failure=SimpleConsequence(
                                 text="Грузовик провалился под лёд!",
-                                modifier=PlayerStatsModifier(-100, -30, -20, evacuated=-5)
+                                modifier=PlayerStatsModifier(-100, -30, -20, evacuated=5)
                             )
                         )
                     ),

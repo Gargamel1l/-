@@ -576,9 +576,43 @@ class Game:
     
     def draw_victory(self):
         screen.fill(BLUE)
+
+        Text(
+            origin=(WIDTH//2, HEIGHT//4),
+            text="БЛОКАДА ПРОРВАНА!",
+            font=font_large,
+            color=GOLD
+        ).draw()
         
-        self.victory_title.draw()
-        self.vicoty_text.draw()
+        # Расчет результатов
+        survival_bonus = min(100, self.stats.health + self.stats.morale)
+        food_score = min(100, self.stats.total_delivered // 20)
+        evacuation_score = min(100, self.stats.evacuated * 10)
+        total_score = (survival_bonus + food_score + evacuation_score) // 3
+        
+        # Описание результата
+        result_desc = (
+            f"27 января 1944 года - Ленинград полностью свободен!\n\n"
+            f"Ваш вклад в победу:\n"
+            f"Доставлено продовольствия: {self.stats.total_delivered} кг\n"
+            f"Эвакуировано людей: {self.stats.evacuated}\n"
+            f"Здоровье: {self.stats.health}% | Боевой дух: {self.stats.morale}%\n\n"
+            f"Общая оценка подвига: {total_score}/100"
+        )
+        
+        Text(
+            origin=(WIDTH//2, HEIGHT//2 - 50),
+            text=result_desc,
+            font=font_medium,
+            color=WHITE
+        ).draw()
+        
+        Text(
+            origin=(WIDTH//2, HEIGHT - 100),
+            text="Нажмите R для перезапуска",
+            font=font_medium,
+            color=WHITE
+        ).draw()
     
     def reset_game(self):
         self.__init__()
