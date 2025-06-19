@@ -415,7 +415,7 @@ def get_scenes(width: int, height: int) -> list[Scene]:
                 title="Ладьяжская флотилия",
                 text="Июль 1942 года. Вы перевозите грузы на барже. Немецкие самолеты атакуют караван.\n"
                      "Ваши действия?",
-                background=load_image("pic4.png", scale=(width, height)),
+                background=create_image((40, 60, 80), width, height),
                 sound=None,
                 date=datetime(1942, 7, 15),
                 choices=[
@@ -462,7 +462,7 @@ def get_scenes(width: int, height: int) -> list[Scene]:
                 title="Снова на лед",
                 text="Декабрь 1942 года. Снова установился лед. Дорога жизни возобновила работу.\n"
                      "Вы везете продовольствие и медикаменты. Встретили замерзающего солдата.",
-                background=create_image((40, 60, 80), width, height),
+                background=load_image("pic4.png", scale=(width, height)),
                 sound=None,
                 date=datetime(1942, 12, 20),
                 choices=[
